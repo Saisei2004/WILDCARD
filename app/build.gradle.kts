@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
-    // id("com.google.gms.google-services")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -53,6 +53,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    
 
     // Firebase
     // implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
@@ -81,4 +82,7 @@ dependencies {
 
     // Coil for Compose
     implementation("io.coil-kt:coil-compose:2.6.0")
+
+
+    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
 }
