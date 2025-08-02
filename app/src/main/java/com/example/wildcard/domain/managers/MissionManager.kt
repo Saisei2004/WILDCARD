@@ -39,7 +39,7 @@ class MissionManager(
         // 仮のミッションループ
         while (System.currentTimeMillis() - startTime < missionDurationMillis) {
             // TODO: imageRecognitionService.verifyEyesOpen() を定期的に呼び出す
-            val eyesOpen = imageRecognitionService.verifyEyesOpen(100) // 仮の確率
+            val eyesOpen = imageRecognitionService.verifyEyesOpen(100f) // 仮の確率
             if (eyesOpen) {
                 eyesOpenDuration += 100 // 仮のフレーム間隔
             }
