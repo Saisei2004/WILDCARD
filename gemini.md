@@ -1,92 +1,296 @@
-# Gemini 開発プラン: EV3連携型 目覚ましアプリ
+# アプリ要件定義書（完成版）
 
-## 1. プロジェクト概要
+---
 
-ユーザー提供の仕様書に基づき、複数人参加型の目覚ましアプリケーションを開発する。設定時刻に起床ミッションを課し、未達成者には他のメンバーがEV3ロボットを遠隔操作して「お仕置き」を行うユニークな機能を持つ。
+## 1. アプリ概要
 
-- **主要機能:**
-    - ユーザー登録とルーム管理（作成/参加）
-    - Firebaseを利用したリアルタイムな状態同期
-    - スマホカメラを用いた起床ミッション（目の開閉を認識）
-    - WebRTCによる一方向の映像ストリーミング
-    - Bluetooth経由でのEV3ロボット遠隔操作
+本アプリは、複数人のグループで起床時間を設定し、時間通りに起きることを促すソーシャルな目覚ましアプリです。起床ミッションに成功しないと、他のメンバーからLEGO MINDSTORMS EV3（以下、EV3）を遠隔操作されて「お仕置き」を受けるというユニークな体験を提供します。
 
-- **技術スタック:**
-    - **言語:** Kotlin
-    - **UI:** Jetpack Compose (またはXML)
-    - **バックエンド/DB:** Firebase (Firestore, Realtime Database)
-    - **映像/音声通信:** WebRTC
-    - **画像認識:** Google ML Kit (Face Detection)
-    - **ロボット連携:** Android Bluetooth API
+---
 
-## 2. 開発フェーズ
+## 2. 機能要件
 
-### フェーズ1: プロジェクト基盤構築とUIスケルトン
+### 2.1. ホーム画面とルームへの参加
 
-1.  **Gradle設定:**
-    - `build.gradle.kts`に必要なライブラリを追加する。
-        - Firebase (Firestore, Auth)
-        - WebRTC
-        - CameraX (カメラ制御用)
-        - ML Kit (顔認識用)
-        - Jetpack Compose Navigation (画面遷移用)
+- **ユーザー名入力:** ホーム画面には「ユーザー名」を入力するテキストボックスを設置します。
+- **ルームへの参加フロー:**
+    1. ホーム画面の「ルームに入る」ボタンをタップすると、ポップアップが表示されます。
+    2. ポップアップ内で「合言葉」を入力し、「入室」ボタンをタップします。
+    3. **ルームの自動生成・参加:**
+        - 入力された「合言葉」に紐づくルームがまだ存在しない場合、その合言葉で新しいルームが自動的に作成され、ユーザーはそこに参加します。
+        - すでに誰かが参加しているルームが存在する場合、ユーザーはそのルームに参加します。
+- **シームレスな体験:** ユーザーにとっては、新規作成と参加の間に画面上の違いはなく、単に「合言葉で指定された空間に入る」という体験になります。
+- **ホスト・ゲストの不在:** 特定のユーザーがホストやゲストになることはありません。ルームはサーバー上のデータベースに存在する共有スペースとして機能します。
 
-2.  **画面スケルトンの作成:**
-    - 仕様書の画面遷移図に基づき、以下の画面の基本的なUIコンポーネントをComposeで作成する。
-        - `UserRegistrationScreen` (ユーザー名登録画面)
-        - `RoomScreen` (ルーム作成/参加画面)
-        - `DashboardScreen` (待機/ダッシュボード画面)
-        - `MissionScreen` (起床ミッション画面)
-        - `RemoteControlScreen` (遠隔操作画面)
+### 2.2. 待機画面 (ダッシュボード) とアラーム動作
 
-3.  **ナビゲーションの設定:**
-    - `NavHost` を使用して、各画面間の遷移ロジックを実装する。
+ルームに参加後、ユーザーはこの画面で待機します。画面には以下の要素を表示します。
 
-### フェーズ2: コア機能実装 (Firebase連携)
+- **起床時間設定:** この画面でルーム全体の起床時刻を設定・変更できます。
+- **残り時間:** 設定された起床時間までのカウントダウンタイマーを「HH:MM:SS」形式で表示します。
+- **参加者リスト:**
+    - **参加者名:** ルームに参加している全メンバーのユーザー名を表示します。
+    - **起床状態:** 各メンバーの現在の状態（例：「待機中」「起床済み」「ミッション中」）を表示します。
+- **時間経過による動的変化:**
+    - 起床時間になると、スマートフォンアプリからBluetooth経由で信号が送られ、**接続されたEV3本体からアラーム音が鳴り始めます。**
+    - 同時に、アプリの「残り時間」表示が大きな**「ミッションを開始する」**ボタンに切り替わります。
+    - ミッションクリア後は、ボタンがあった場所が**「おはようございます」**というテキスト表示に変わります。
 
-1.  **Firebaseプロジェクト設定:**
-    - Firebaseコンソールでプロジェクトを作成し、Androidアプリに接続する。
-    - `google-services.json` をプロジェクトに追加する。
+### 2.3. 起床ミッション機能
 
-2.  **`FirebaseService` の実装:**
-    - ユーザー登録、ルームの作成/検索、状態更新（起床済みなど）を行うためのメソッドを実装する。
-    - Firestoreのリアルタイムリスナー (`listenToRoomState`) を使用して、ルームの状態変更をアプリに反映させる。
+- 「ミッションを開始する」ボタンをタップすると、ミッション画面に遷移します。
+- ミッション内容は「スマートフォンのインカメラを使い、10秒間目を開け続けること」とします。
+- ミッションに成功すると、ユーザーのステータスが「起床済み」に更新され、待機画面に戻ります。**同時に、アプリからEV3へ停止信号が送られ、アラーム音が止まります。**
 
-3.  **`RoomManager` の実装:**
-    - UIからの入力を受け取り、`FirebaseService`を呼び出してユーザー登録とルームへの参加/作成処理を行う。
+### 2.4. お仕置き（EV3遠隔操作）機能
 
-### フェーズ3: 起床ミッション機能の実装
+- **操作画面への遷移:** 待機画面で、起床時間後にまだ起きていないメンバーの**名前をタップ**すると、遠隔操作画面に遷移します。
+- **操作画面の構成:**
+    - **カメラ映像:** 対象メンバーのEV3に搭載されたスマートフォンのカメラ映像が表示されます。
+    - **操作パネル:** 相手のEV3を動かすためのバーチャルコントローラーが表示されます。
+    - **お仕置きボタン:** EV3の特定のアクション（例：ハンマーを振り下ろす）を実行させるためのボタンを設置します。
+- **操作対象:** ユーザーは、この画面を通じて**他人のEV3ロボットを直接操作**し、「お仕置き」を実行します。
 
-1.  **`ImageRecognitionService` の実装:**
-    - CameraXを使用してフロントカメラからの映像プレビューを `MissionScreen` に表示する。
-    - ML KitのFace Detection APIを利用して、顔と両目を検出する。
-    - 目の開いている確率 (`leftEyeOpenProbability`, `rightEyeOpenProbability`) を監視し、「10秒間開け続けたか」を判定するロジック (`verifyEyesOpen`) を実装する。
+---
 
-2.  **`MissionManager` の実装:**
-    - `MissionScreen` から呼び出され、`ImageRecognitionService` を使ってミッションを開始・管理する。
-    - ミッション成功後、`FirebaseService` を通じて自身のステータスを「起床済み」に更新する。
+## 3. システム構成案
 
-### フェーズ4: お仕置き機能の実装 (WebRTC & Bluetooth)
+### 3.1. フローチャート (ユーザー体験の流れ)
 
-1.  **`CallManager` (WebRTC) の実装:**
-    - WebRTCライブラリをセットアップする。
-    - Firebaseをシグナリングサーバーとして利用し、お仕置き対象者との間で接続情報（SDP, ICE Candidate）を交換するロジックを実装する。
-    - `RemoteControlScreen` に、受信した映像ストリームを表示する `SurfaceViewRenderer` を配置する。
+```mermaid
+flowchart TD
+    subgraph "アプリ利用の流れ"
+        A[ユーザー名登録] --> B[ルーム作成/参加];
+        B --> C[待機画面];
+        C --> D{アラーム時間？};
+        D -- No --> C;
+        D -- Yes --> E["ミッションを開始する"ボタン出現 & EV3アラーム作動];
+        E -- ボタンを押す --> F(起床ミッション挑戦);
+        F --> G{"10秒間目を開け続けられた？"};
+        G -- No --> F;
+        G -- Yes --> H["おはようございます"表示 & EV3アラーム停止];
+        H --> I{未起床の人はいる？};
+        I -- No --> J[平和な朝...☀️];
+        I -- Yes --> K[お仕置きを実行];
+        K --> L[EV3搭載スマホのカメラ映像を見ながら遠隔操作];
+        L --> H;
+    end
+```
 
-2.  **`RobotController` (Bluetooth) の実装:**
-    - AndroidのBluetooth APIを使用して、EV3ロボットとのペアリングと接続を行う `BluetoothService` を作成する。
-    - `RemoteControlScreen` にコントローラーUI（十字キーなど）を配置する。
-    - UI操作を検知し、対応するコマンドを `BluetoothService` 経由でEV3に送信する (`handleControlData`)。
+図の解説:
 
-3.  **`PunishmentManager` の実装:**
-    - `DashboardScreen` でお仕置きボタンが押された際に、`CallManager` を呼び出して映像ストリーミングを開始 (`startOneWayVideoStream`) し、`RemoteControlScreen` に遷移させる。
-    - `RemoteControlScreen` でのUI操作を `RobotController` に中継する。
+ユーザー体験の大きな流れは変わりませんが、アラーム時間になると「ミッションボタンの出現」と同時に**「EV3のアラームが作動」し、ミッションをクリアすると「アラームが停止」**する点が明確化されました。
 
-### フェーズ5: 統合とテスト
+### 3.2. クラス図 (システムの構成要素)
 
-1.  **全体フローのテスト:**
-    - 複数のデバイス（エミュレータまたは実機）を使用して、ユーザー登録からお仕置きまでの全フローが仕様書通りに動作することを確認する。
-2.  **デバッグとリファイン:**
-    - 各機能の連携部分で発生する問題を修正する。
-    - UI/UXを改善し、より直感的な操作ができるように調整する。
+```mermaid
+classDiagram
+    class MobileApp {
+        +startApp()
+    }
+    class RoomManager {
+        -FirebaseService firebase
+        +registerUser(name)
+        +joinOrCreateRoom(roomName, wakeupTime)
+        +updateWakeupTime(wakeupTime)
+    }
+    class CallManager {
+        -FirebaseService firebase
+        +startOneWayVideoStream(targetUserId)
+    }
+    class MissionManager {
+        -ImageRecognitionService imageRecognition
+        +startStareMission()
+    }
+    class PunishmentManager {
+        -FirebaseService firebase
+        -CallManager callManager
+        +startRobotPunishment(targetUserId)
+    }
+    class FirebaseService {
+        +findOrCreateRoom()
+        +updateUserStatus()
+        +updateRoomSettings()
+        +sendSignalingMessage()
+        +sendPunishmentCommand()
+        +listenToRoomState()
+    }
+    class RobotController {
+        -BluetoothService bluetooth
+        +triggerAlarm()
+        +stopAlarm()
+        +handleControlData(controlData)
+    }
+    class ImageRecognitionService {
+        +verifyEyesOpen(duration) bool
+    }
 
+    MobileApp --> RoomManager
+    MobileApp --> CallManager
+    MobileApp --> MissionManager
+    MobileApp --> PunishmentManager
+    MobileApp --> RobotController
+
+    RoomManager ..> FirebaseService
+    CallManager ..> FirebaseService
+    PunishmentManager ..> FirebaseService
+    MissionManager ..> ImageRecognitionService
+    PunishmentManager ..> CallManager
+```
+
+図の解説:
+
+RoomManagerにupdateWakeupTime、RobotControllerにtriggerAlarmとstopAlarmといった具体的なメソッドを追加し、ダッシュボードでの時間設定変更やアラーム制御の役割を明確化しました。
+
+### 3.3. シーケンス図 (処理の具体的な流れ)
+
+```mermaid
+sequenceDiagram
+    participant User as ユーザー
+    participant App as 自身のスマホアプリ
+    participant R as 自身のEV3ロボット
+    participant F as Firebase (クラウド)
+    participant A as スマホA (操作者)
+    participant C as スマホC (未起床者)
+    participant R_C as CさんのEV3ロボット
+
+    Note over User,F: ① ユーザー登録とルーム参加
+    User->>App: ユーザー名、合言葉を入力し「入室」
+    App->>F: ルームを検索、なければ新規作成
+    F-->>App: ルーム情報を返す
+    App->>User: 待機画面を表示
+
+    Note over App,F: ② アラーム時間とミッション
+    F-->>App: (起床時間になったことを通知)
+    App->>R: (Bluetooth経由で)アラーム再生を命令
+    R->>R: アラームを鳴らす
+    App->>User: 「ミッションを開始する」ボタンを表示
+    User->>App: ボタンをタップ
+    App->>App: (カメラで)10秒間目を開けるミッション開始
+    App->>F: 自身の状態を「起床済み」に更新
+    App->>R: (Bluetooth経由で)アラーム停止を命令
+    R->>R: アラームを止める
+    App->>User: 待機画面に「おはようございます」と表示
+
+    Note over A,F: ③ お仕置き
+    A->>App: (待機画面でCさんの名前をタップ)
+    App->>F: Cに映像ストリームを要求
+    F-->>C: Aからの映像要求を通知
+    Note over C: (自動で)自身のカメラを起動し、映像の接続準備
+    C->>F: Aに映像の接続情報(オファー)を送信
+    F-->>A: Cからのオファーを転送
+    A->>F: 応答(アンサー)を返す
+    F-->>C: Aからのアンサーを転送
+    C-->>A: (WebRTCで)自身のカメラ映像を直接送信開始
+    loop Cがミッションをクリアするまで
+        A->>App: (コントローラーUIを操作)
+        App->>F: Cのスマホに操作データを送信
+        F-->>C: Aからの操作データを通知
+        C->>R_C: (Bluetooth経由で)ロボットに命令を送信
+        R_C->>R_C: 操作データに従い動作
+    end
+```
+
+**図の解説:**
+
+- **アラーム & ミッション:** 起床時間になると、Firebaseからの通知を受けたアプリが、Bluetooth経由で**自身のEV3にアラーム再生を命令**します。ミッションをクリアすると、同様に**アラーム停止を命令**する流れを明記しました。
+- **お仕置き:** お仕置きの開始トリガーを、ボタンのタップから**「未起床者の名前をタップ」**という操作に変更しました。
+
+### 3.4. 通信プロトコルの解説
+
+- **スマホ ↔ Firebaseサーバー (WebSocket):**
+    - **役割:** アプリの心臓部。ルームやユーザーの状態更新、各種コマンド（通話開始、映像要求、操作データ）の送受信に使われます。ルームの起床時間設定の更新もここで行われます。
+- **スマホ ↔ スマホ (WebRTC):**
+    - **役割:** お仕置きの際の、ターゲットのスマホから操作者のスマホへの**一方向映像ストリーミング**に使用します。
+- **スマホ ↔ EV3ロボット (Bluetooth):**
+    - **役割:** スマートフォンが「ブリッジ（橋渡し）」役となり、EV3を直接制御します。
+    - **具体的な通信内容:**
+        - **アラーム制御:** 起床時間になった際の「アラーム再生」コマンド、ミッションクリア時の「アラーム停止」コマンド。
+        - **遠隔操作:** お仕置きの際に、Firebaseから受信した操作データをリアルタイムでEV3に送信。
+
+### 3.5. アプリ画面遷移図
+
+```mermaid
+flowchart TD
+    subgraph "アプリの画面構成"
+        A(ユーザー名登録/ルーム参加画面) --> C(待機/ダッシュボード画面);
+
+        C -- 時間まで待機 --> C;
+        C -- 時間になったら --> D["ミッションを開始する"ボタン表示];
+        D -- ボタンをタップ --> E(起床ミッション画面);
+        E -- クリア失敗 --> C;
+        E -- クリア成功 --> F(待機/ダッシュボード画面);
+        F -- "未起床者の名前をタップ" --> G(遠隔操作画面);
+        G -- 終了 --> F;
+    end
+```
+
+図の解説:
+
+遠隔操作画面への遷移トリガーを、より具体的な「未起床者の名前をタップ」に更新しました。
+
+### 3.6. データベース設計 (データモデル)
+
+本システムでは、リアルタイム性とスケーラビリティを考慮し、NoSQLデータベースである **Cloud Firestore** の利用を想定します。データは「コレクション」と「ドキュメント」の形式で管理します。
+
+### 3.6.1. コレクション構成
+
+主に2つのコレクションを定義します。
+
+1. **`rooms` コレクション:** 各ルームの情報を格納します。
+2. **`users` コレクション:** 各ユーザーの情報を格納します。
+
+### 3.6.2. データ構造の詳細
+
+**`rooms` コレクション**
+
+- **ドキュメントID:** ユーザーが入力する「合言葉」をそのままIDとして使用します。
+- **フィールド:**
+    - `wakeupTime` (Timestamp): ルームで設定された起床時間
+    - `createdAt` (Timestamp): ルームが最初に作成された日時
+
+*(例: `rooms` コレクション内のドキュメント)*
+
+```json
+{
+  "合言葉1234": {
+    "wakeupTime": "August 20, 2024 at 7:00:00 AM UTC+9",
+    "createdAt": "August 19, 2024 at 10:30:00 PM UTC+9"
+  }
+}
+```
+
+**`users` コレクション**
+
+- **ドキュメントID:** Firebase Authenticationなどで発行される一意のユーザーID (`uid`) を使用します。
+- **フィールド:**
+    - `username` (String): ユーザーが設定した名前
+    - `roomId` (String): 現在参加しているルームのID（合言葉）
+    - `status` (String): ユーザーの現在の状態 (`waiting`, `mission`, `woke_up`)
+    - `lastSeen` (Timestamp): ユーザーの最終アクティブ日時（オフライン判定などに使用）
+
+*(例: `users` コレクション内のドキュメント)*
+
+```json
+{
+  "abcdefg12345": {
+    "username": "Taro",
+    "roomId": "合言葉1234",
+    "status": "waiting",
+    "lastSeen": "August 20, 2024 at 6:59:00 AM UTC+9"
+  },
+  "hijklmn67890": {
+    "username": "Hanako",
+    "roomId": "合言葉1234",
+    "status": "waiting",
+    "lastSeen": "August 20, 2024 at 6:58:00 AM UTC+9"
+  }
+}
+```
+
+### 3.6.3. データ連携
+
+- アプリは、まず `users` コレクションから自身の `roomId` を取得します。
+- 次に、その `roomId` を使って `rooms` コレクションから起床時間などのルーム情報を取得します。
+- 待機画面（ダッシュボード）に参加者一覧を表示する際は、`roomId` が一致するユーザーを `users` コレクションから全て検索し、`username` と `status` を表示します。
+- この構成により、ユーザー情報とルーム情報を分離し、効率的なデータの読み書きを実現します。
