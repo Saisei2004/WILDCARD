@@ -1,13 +1,19 @@
 package com.example.wildcard.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.wildcard.ui.registration.UserRegistrationScreen
+import androidx.navigation.navArgument
 import com.example.wildcard.ui.dashboard.DashboardScreen
+import com.example.wildcard.ui.dashboard.DashboardViewModel
 import com.example.wildcard.ui.mission.MissionScreen
 import com.example.wildcard.ui.remotecontrol.RemoteControlScreen
+import com.example.wildcard.ui.registration.UserRegistrationScreen
 
 /**
  * アプリケーションのナビゲーションを定義します。
@@ -24,8 +30,17 @@ fun AppNavigation() {
             UserRegistrationScreen(navController = navController)
         }
         // ダッシュボード画面
-        composable("dashboard_route") {
-            DashboardScreen(navController = navController)
+        composable(
+            // ① ルートに引数 {roomId} を追加
+            route = "dashboard_route/{roomId}",
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            // ② 引数からroomIdを取り出し、ViewModelに渡す
+            val roomId = backStackEntry.arguments?.getString("roomId") ?: return@composable
+            val viewModel: DashboardViewModel = viewModel(
+                factory = DashboardViewModelFactory(roomId)
+            )
+            DashboardScreen(navController = navController, viewModel = viewModel)
         }
         // ミッション画面
         composable("mission_route") {
@@ -35,5 +50,16 @@ fun AppNavigation() {
         composable("remote_control_route") {
             RemoteControlScreen(navController = navController)
         }
+    }
+}
+
+// ③ ViewModelに引数を渡すためのFactoryクラス
+class DashboardViewModelFactory(private val roomId: String) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return DashboardViewModel(roomId) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

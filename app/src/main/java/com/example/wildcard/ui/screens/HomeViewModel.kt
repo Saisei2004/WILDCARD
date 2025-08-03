@@ -27,8 +27,8 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             val result = repository.joinOrCreateRoom(username, roomCode)
             if (result.isSuccess) {
-                // 成功したらダッシュボードへの遷移イベントを通知
-                _navigationEvent.emit(NavigationEvent.NavigateToDashboard)
+                // 成功したらダッシュボードへの遷移イベントにroomCodeを詰めて通知
+                _navigationEvent.emit(NavigationEvent.NavigateToDashboard(roomCode)) // ← ここを変更
             } else {
                 // 失敗したらエラーイベントを通知
                 val errorMessage = result.exceptionOrNull()?.message ?: "不明なエラーが発生しました"
@@ -39,7 +39,8 @@ class HomeViewModel : ViewModel() {
 
     // ナビゲーションイベントを定義する sealed class
     sealed class NavigationEvent {
-        object NavigateToDashboard : NavigationEvent()
+        // dashboardへ遷移する際にroomIdを渡すように変更
+        data class NavigateToDashboard(val roomId: String) : NavigationEvent()
         data class ShowError(val message: String) : NavigationEvent()
     }
 }
