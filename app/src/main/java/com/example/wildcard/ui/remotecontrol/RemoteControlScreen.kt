@@ -108,7 +108,7 @@ fun RemoteControlScreen(
             // 上ボタン
             PressAndHoldButton(
                 onPress = { viewModel.updateMoveDirection("forward") },
-                onRelease = { if (moveDirection == "forward") viewModel.updateMoveDirection("stop") }
+                onRelease = { viewModel.stopMovingIfNecessary("forward") }
             ) { Text("↑") }
 
             // 中央のボタン群
@@ -119,21 +119,21 @@ fun RemoteControlScreen(
             ) {
                 PressAndHoldButton(
                     onPress = { viewModel.updateMoveDirection("left") },
-                    onRelease = { if (moveDirection == "left") viewModel.updateMoveDirection("stop") }
+                    onRelease = { viewModel.stopMovingIfNecessary("left") }
                 ) { Text("←") }
 
                 Spacer(modifier = Modifier.width(70.dp)) // 見た目のための空白
 
                 PressAndHoldButton(
                     onPress = { viewModel.updateMoveDirection("right") },
-                    onRelease = { if (moveDirection == "right") viewModel.updateMoveDirection("stop") }
+                    onRelease = { viewModel.stopMovingIfNecessary("right") }
                 ) { Text("→") }
             }
 
             // 下ボタン
             PressAndHoldButton(
                 onPress = { viewModel.updateMoveDirection("backward") },
-                onRelease = { if (moveDirection == "backward") viewModel.updateMoveDirection("stop") }
+                onRelease = { viewModel.stopMovingIfNecessary("backward") }
             ) { Text("↓") }
         }
         Spacer(modifier = Modifier.height(16.dp))
