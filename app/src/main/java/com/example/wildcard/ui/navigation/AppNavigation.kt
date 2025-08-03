@@ -31,11 +31,9 @@ fun AppNavigation() {
         }
         // ダッシュボード画面
         composable(
-            // ① ルートに引数 {roomId} を追加
             route = "dashboard_route/{roomId}",
             arguments = listOf(navArgument("roomId") { type = NavType.StringType })
         ) { backStackEntry ->
-            // ② 引数からroomIdを取り出し、ViewModelに渡す
             val roomId = backStackEntry.arguments?.getString("roomId") ?: return@composable
             val viewModel: DashboardViewModel = viewModel(
                 factory = DashboardViewModelFactory(roomId)
@@ -47,13 +45,18 @@ fun AppNavigation() {
             MissionScreen(navController = navController)
         }
         // 遠隔操作画面
-        composable("remote_control_route") {
+        composable(
+            // 【変更点】ルートに引数 {targetUserId} を追加
+            route = "remote_control_route/{targetUserId}",
+            arguments = listOf(navArgument("targetUserId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            // val targetUserId = backStackEntry.arguments?.getString("targetUserId")
             RemoteControlScreen(navController = navController)
         }
     }
 }
 
-// ③ ViewModelに引数を渡すためのFactoryクラス
+// ViewModelに引数を渡すためのFactoryクラス
 class DashboardViewModelFactory(private val roomId: String) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
