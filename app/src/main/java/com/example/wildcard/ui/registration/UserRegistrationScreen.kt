@@ -8,6 +8,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.google.firebase.firestore.FirebaseFirestore
+import com.example.wildcard.service.firebase.FirebaseService
+import com.example.wildcard.domain.managers.RoomManager
+import kotlinx.coroutines.launch
 import androidx.navigation.compose.rememberNavController
 
 /**
@@ -22,6 +26,12 @@ fun UserRegistrationScreen(navController: NavController) {
     var username by remember { mutableStateOf("") }
     var roomCode by remember { mutableStateOf("") }
     var showDialog by remember { mutableStateOf(false) }
+    var showRegistrationError by remember { mutableStateOf(false) } // エラー表示用
+
+    val scope = rememberCoroutineScope()
+    val firestore = remember { FirebaseFirestore.getInstance() }
+    val firebaseService = remember { FirebaseService(firestore) }
+    val roomManager = remember { RoomManager(firebaseService) }
 
     Column(
         modifier = Modifier
@@ -65,11 +75,21 @@ fun UserRegistrationScreen(navController: NavController) {
                 confirmButton = {
                     Button(
                         onClick = {
-                            // TODO: ルーム参加ロジックを実装
-                            // RoomManager.joinOrCreateRoom(username, roomCode) を呼び出す
-                            // 成功したらDashboardScreenへ遷移
-                            showDialog = false
-                            navController.navigate("dashboard_route") // 仮の遷移
+                            if (username.isBlank() || roomCode.isBlank()) {
+                                showRegistrationError = true
+                                return@Button
+                            }
+                            scope.launch {
+                                val success = roomManager.registerUserAndJoinOrCreateRoom(username, roomCode)
+                                if (success) {
+                                    showDialog = false
+                                    navController.navigate("dashboard_route") {
+                                        popUpTo("dashboard_route") { inclusive = true }
+                                    }
+                                } else {
+                                    showRegistrationError = true
+                                }
+                            }
                         }
                     ) {
                         Text("入室")
@@ -78,6 +98,20 @@ fun UserRegistrationScreen(navController: NavController) {
                 dismissButton = {
                     Button(onClick = { showDialog = false }) {
                         Text("キャンセル")
+                    }
+                }
+            )
+        }
+
+        // エラー表示ダイアログ
+        if (showRegistrationError) {
+            AlertDialog(
+                onDismissRequest = { showRegistrationError = false },
+                title = { Text("エラー") },
+                text = { Text("ユーザー名または合言葉が不正です。") },
+                confirmButton = {
+                    Button(onClick = { showRegistrationError = false }) {
+                        Text("OK")
                     }
                 }
             )

@@ -23,7 +23,7 @@ class RoomManager(
      */
     suspend fun registerUserAndJoinOrCreateRoom(username: String, roomCode: String): Boolean {
         // TODO: Firebase Authenticationでユーザーを認証し、UIDを取得
-        val uid = "dummy_uid_" + System.currentTimeMillis() // 仮のUID
+        val uid = java.util.UUID.randomUUID().toString()
 
         // ルームを検索または作成
         val room = firebaseService.findOrCreateRoom(roomCode)
