@@ -1,98 +1,101 @@
 package com.example.wildcard.ui.dashboard
 
-import androidx.compose.foundation.clickable
+import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
+import com.example.wildcard.data.model.User
+import java.text.SimpleDateFormat
+import java.util.*
 
-/**
- * 待機画面（ダッシュボード）
- *
- * ルームに参加後、ユーザーが待機する画面です。
- * 起床時間の設定、残り時間の表示、参加者リストの表示、
- * およびアラーム時間になった際のミッション開始ボタンの表示を行います。
- * 未起床者がいる場合、そのメンバーをタップすることで遠隔操作画面へ遷移します。
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(navController: NavController) {
-    // TODO: ViewModelなどからルームの状態（起床時間、残り時間、参加者リスト、各メンバーの起床状態）を取得
-    val wakeupTime by remember { mutableStateOf("07:00") } // 仮の起床時間
-    val remainingTime by remember { mutableStateOf("00:00:00") } // 仮の残り時間
-    val participants by remember { mutableStateOf(listOf("Taro (待機中)", "Hanako (起床済み)", "Jiro (ミッション中)")) } // 仮の参加者リスト
-    val isAlarmTime by remember { mutableStateOf(false) } // 仮のアラーム時間フラグ
-    val missionCleared by remember { mutableStateOf(false) } // 仮のミッションクリアフラグ
+fun DashboardScreen(
+    navController: NavController,
+    viewModel: DashboardViewModel = viewModel()
+) {
+    // --- ViewModelからリアルタイムのデータを取得 ---
+    val room by viewModel.room.collectAsState()
+    val users by viewModel.users.collectAsState()
+    val countdown by viewModel.countdown.collectAsState()
+    val context = LocalContext.current
+
+    // --- 時刻設定ダイアログの準備 ---
+    val timePicker = TimePickerDialog(
+        context,
+        { _, hourOfDay, minute -> viewModel.setWakeupTime(hourOfDay, minute) },
+        Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+        Calendar.getInstance().get(Calendar.MINUTE),
+        true
+    )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "起床時間: $wakeupTime",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        // --- 起床時間表示 ---
+        Text("起床時間", style = MaterialTheme.typography.titleMedium)
+        val wakeupTimeFormatted = room?.wakeupTime?.let {
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+        } ?: "未設定"
+        Text(wakeupTimeFormatted, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- 残り時間表示 ---
+        Text(countdown, fontSize = 32.sp)
+
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "残り時間: $remainingTime",
-            style = MaterialTheme.typography.headlineLarge
-        )
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // 参加者リスト
-        Text(
-            text = "参加者",
-            style = MaterialTheme.typography.headlineSmall
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        participants.forEach { participant ->
-            Text(
-                text = participant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clickable { 
-                        // TODO: 未起床者の名前をタップした場合、RemoteControlScreenへ遷移
-                        // 例: if (participant.contains("未起床")) navController.navigate("remote_control_route")
-                    }
-            )
+        Button(onClick = { timePicker.show() }) {
+            Text("起床時間を設定する")
         }
-        Spacer(modifier = Modifier.height(32.dp))
 
-        // アラーム時間になった際の表示
-        if (isAlarmTime) {
-            if (!missionCleared) {
-                Button(
-                    onClick = {
-                        // TODO: ミッション開始ロジック
-                        navController.navigate("mission_route") // 仮の遷移
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("ミッションを開始する")
-                }
-            } else {
-                Text(
-                    text = "おはようございます",
-                    style = MaterialTheme.typography.headlineMedium
-                )
+        Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+        // --- 参加者リスト表示 ---
+        Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            items(users) { user ->
+                UserListItem(user)
             }
         }
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun PreviewDashboardScreen() {
-    DashboardScreen(rememberNavController())
+fun UserListItem(user: User) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(user.username, modifier = Modifier.weight(1f))
+        Text(
+            text = when (user.status) {
+                "waiting" -> "待機中"
+                "mission" -> "ミッション中"
+                "woke_up" -> "起床済み"
+                else -> ""
+            },
+            color = when (user.status) {
+                "woke_up" -> MaterialTheme.colorScheme.primary
+                else -> LocalContentColor.current
+            }
+        )
+    }
 }
