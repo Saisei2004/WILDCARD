@@ -41,7 +41,7 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(top = 40.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // ... (起床時間、残り時間、設定ボタンは変更なし) ...
