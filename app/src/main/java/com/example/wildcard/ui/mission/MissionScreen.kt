@@ -1,7 +1,9 @@
 package com.example.wildcard.ui.mission
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -10,6 +12,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+
 
 /**
  * 起床ミッション画面
@@ -57,7 +60,7 @@ fun MissionScreen(navController: NavController) {
 
         // 進捗バー
         LinearProgressIndicator(
-            progress = missionProgress / 100f,
+            progress = { missionProgress / 100f },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
