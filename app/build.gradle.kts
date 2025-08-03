@@ -62,9 +62,6 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)
 
-    // WebRTC
-    implementation("org.webrtc:google-webrtc:1.0.30039@aar")
-
     // CameraX
     implementation("androidx.camera:camera-core:1.3.4")
     implementation("androidx.camera:camera-camera2:1.3.4")

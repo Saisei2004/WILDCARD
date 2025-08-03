@@ -16,4 +16,8 @@ object Constants {
 
     // EV3 Bluetooth関連
     const val EV3_MAC_ADDRESS = "00:16:53:42:2B:99" // TODO: 実際のEV3のMACアドレスに置き換える
+    
+    // SkyWay WebRTC設定
+    const val SKYWAY_APP_ID = "3ec5167f-bda7-47c6-8f12-9d155f2fed26"
+    const val SKYWAY_SECRET_KEY = "ExSs3TQDYzSzedRer4hvuVd/8aHc542+t6UdC/HRKXE="
 }

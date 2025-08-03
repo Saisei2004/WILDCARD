@@ -1,6 +1,7 @@
 package com.example.wildcard.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -23,6 +24,7 @@ import com.example.wildcard.ui.registration.UserRegistrationScreen
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val context = LocalContext.current
 
     NavHost(navController = navController, startDestination = "registration_route") {
         // ユーザー登録/ルーム参加画面
@@ -36,7 +38,7 @@ fun AppNavigation() {
         ) { backStackEntry ->
             val roomId = backStackEntry.arguments?.getString("roomId") ?: return@composable
             val viewModel: DashboardViewModel = viewModel(
-                factory = DashboardViewModelFactory(roomId)
+                factory = DashboardViewModelFactory(roomId, context.applicationContext)
             )
             DashboardScreen(navController = navController, viewModel = viewModel)
         }
@@ -49,20 +51,21 @@ fun AppNavigation() {
             route = "remote_control_route/{targetUserId}",
             arguments = listOf(navArgument("targetUserId") { type = NavType.StringType })
         ) { backStackEntry ->
-            // ✅ backStackEntryからtargetUserIdを取得します。
             val targetUserId = backStackEntry.arguments?.getString("targetUserId") ?: ""
-            // ✅ RemoteControlScreenに取得したIDを渡します。
             RemoteControlScreen(navController = navController, targetUserId = targetUserId)
         }
     }
 }
 
 // ViewModelに引数を渡すためのFactoryクラス
-class DashboardViewModelFactory(private val roomId: String) : ViewModelProvider.Factory {
+class DashboardViewModelFactory(
+    private val roomId: String,
+    private val applicationContext: android.content.Context
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return DashboardViewModel(roomId) as T
+            return DashboardViewModel(roomId, applicationContext) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

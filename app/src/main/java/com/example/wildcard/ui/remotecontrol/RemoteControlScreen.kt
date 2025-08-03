@@ -11,14 +11,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.example.wildcard.data.model.ControlCommand
-import com.example.wildcard.service.firebase.FirebaseService
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.ntt.skyway.core.content.sink.SurfaceViewRenderer
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -34,36 +33,29 @@ fun RemoteControlScreen(
     navController: NavController,
     targetUserId: String
 ) {
-    // FirebaseServiceをインスタンス化
-    val firebaseService = remember { FirebaseService(FirebaseFirestore.getInstance()) }
-    // 非同期処理（Firebaseへの送信）を行うためのスコープ
-    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val viewModel = remember { RemoteControlViewModel(targetUserId, context.applicationContext) }
+    
+    // WebRTC関連の状態
+    val remoteVideoStream = viewModel.remoteVideoStream
+    var remoteRenderView by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+    
+    // ViewModelの状態を監視
+    val moveDirection = viewModel.moveDirection
+    val punishmentActive = viewModel.punishmentActive
+    val soundActive = viewModel.soundActive
 
-    // --- ここからが新しいロジック ---
-
-    // 現在操作しているユーザー（送信者）のIDを取得
-    val senderId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "unknown_sender" }
-
-    // 現在の「移動方向」「お仕置き」「音」の状態を保持する変数
-    var moveDirection by remember { mutableStateOf("stop") }
-    var punishmentActive by remember { mutableStateOf(false) }
-    var soundActive by remember { mutableStateOf(false) } // ✅ 音の状態を追加
-
-    // いずれかの状態が変化するたびに、最新のコマンドを合成してFirebaseに送信するエフェクト
-    LaunchedEffect(moveDirection, punishmentActive, soundActive) {
-        val command = ControlCommand(
-            senderId = senderId,
-            direction = moveDirection,
-            action = if (punishmentActive) "hammer_strike" else "none",
-            sound = if (soundActive) "alarm" else "none" // ✅ 音の状態をコマンドに含める
-        )
-        scope.launch {
-            firebaseService.sendControlCommand(targetUserId, command)
-        }
+    // 画面表示時にWebRTC視聴を開始
+    LaunchedEffect(Unit) {
+        viewModel.startViewing()
     }
 
-    // --- ここまでが新しいロジック ---
-
+    // 画面終了時にリソースを解放
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.endControl()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -86,7 +78,26 @@ fun RemoteControlScreen(
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            Text("対象のEV3カメラ映像", color = Color.White)
+            if (remoteVideoStream != null) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        remoteRenderView = SurfaceViewRenderer(ctx)
+                        remoteRenderView!!.apply {
+                            setup()
+                            remoteVideoStream.addRenderer(this)
+                        }
+                    },
+                    update = {
+                        remoteRenderView?.let { renderer ->
+                            remoteVideoStream.removeRenderer(renderer)
+                            remoteVideoStream.addRenderer(renderer)
+                        }
+                    }
+                )
+            } else {
+                Text("映像接続中...", color = Color.White)
+            }
         }
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -96,8 +107,8 @@ fun RemoteControlScreen(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             // 上ボタン
             PressAndHoldButton(
-                onPress = { moveDirection = "forward" },
-                onRelease = { if (moveDirection == "forward") moveDirection = "stop" }
+                onPress = { viewModel.updateMoveDirection("forward") },
+                onRelease = { if (moveDirection == "forward") viewModel.updateMoveDirection("stop") }
             ) { Text("↑") }
 
             // 中央のボタン群
@@ -107,53 +118,55 @@ fun RemoteControlScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 PressAndHoldButton(
-                    onPress = { moveDirection = "left" },
-                    onRelease = { if (moveDirection == "left") moveDirection = "stop" }
+                    onPress = { viewModel.updateMoveDirection("left") },
+                    onRelease = { if (moveDirection == "left") viewModel.updateMoveDirection("stop") }
                 ) { Text("←") }
 
                 Spacer(modifier = Modifier.width(70.dp)) // 見た目のための空白
 
                 PressAndHoldButton(
-                    onPress = { moveDirection = "right" },
-                    onRelease = { if (moveDirection == "right") moveDirection = "stop" }
+                    onPress = { viewModel.updateMoveDirection("right") },
+                    onRelease = { if (moveDirection == "right") viewModel.updateMoveDirection("stop") }
                 ) { Text("→") }
             }
 
             // 下ボタン
             PressAndHoldButton(
-                onPress = { moveDirection = "backward" },
-                onRelease = { if (moveDirection == "backward") moveDirection = "stop" }
+                onPress = { viewModel.updateMoveDirection("backward") },
+                onRelease = { if (moveDirection == "backward") viewModel.updateMoveDirection("stop") }
             ) { Text("↓") }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ✅ アクションボタン群
+        // アクションボタン群
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp) // ボタン間のスペース
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // お仕置きボタン
             PressAndHoldButton(
-                onPress = { punishmentActive = true },
-                onRelease = { punishmentActive = false },
-                modifier = Modifier.weight(1f) // 横幅を均等に分ける
+                onPress = { viewModel.updatePunishmentActive(true) },
+                onRelease = { viewModel.updatePunishmentActive(false) },
+                modifier = Modifier.weight(1f)
             ) {
                 Text("お仕置き！")
             }
             // 音を鳴らすボタン
             PressAndHoldButton(
-                onPress = { soundActive = true },
-                onRelease = { soundActive = false },
-                modifier = Modifier.weight(1f) // 横幅を均等に分ける
+                onPress = { viewModel.updateSoundActive(true) },
+                onRelease = { viewModel.updateSoundActive(false) },
+                modifier = Modifier.weight(1f)
             ) {
                 Text("音を鳴らす")
             }
         }
 
-
         Spacer(modifier = Modifier.height(32.dp))
 
-        Button(onClick = { navController.popBackStack() }) {
+        Button(onClick = { 
+            viewModel.endControl()
+            navController.popBackStack() 
+        }) {
             Text("操作終了")
         }
     }
