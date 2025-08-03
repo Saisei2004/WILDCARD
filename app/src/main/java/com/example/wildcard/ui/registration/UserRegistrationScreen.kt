@@ -1,126 +1,116 @@
 package com.example.wildcard.ui.registration
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.google.firebase.firestore.FirebaseFirestore
-import com.example.wildcard.service.firebase.FirebaseService
-import com.example.wildcard.domain.managers.RoomManager
+import com.example.wildcard.ui.screens.HomeViewModel
 import kotlinx.coroutines.launch
-import androidx.navigation.compose.rememberNavController
 
-/**
- * ユーザー名登録とルーム参加画面
- *
- * ユーザーが自身のユーザー名を入力し、既存のルームに合言葉で参加するか、
- * 新しいルームを合言葉で作成して参加する機能を提供します。
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserRegistrationScreen(navController: NavController) {
+fun UserRegistrationScreen(
+    navController: NavController,
+    homeViewModel: HomeViewModel = viewModel()
+) {
+    // --- 1. UIの状態を管理する変数 ---
     var username by remember { mutableStateOf("") }
     var roomCode by remember { mutableStateOf("") }
     var showDialog by remember { mutableStateOf(false) }
-    var showRegistrationError by remember { mutableStateOf(false) } // エラー表示用
 
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val firestore = remember { FirebaseFirestore.getInstance() }
-    val firebaseService = remember { FirebaseService(firestore) }
-    val roomManager = remember { RoomManager(firebaseService) }
 
+    // --- 2. ViewModelからのイベントを監視 ---
+    //    (ルーム参加成功/失敗を待って画面遷移やトースト表示を行う)
+    LaunchedEffect(Unit) {
+        homeViewModel.navigationEvent.collect { event ->
+            when (event) {
+                is HomeViewModel.NavigationEvent.NavigateToDashboard -> {
+                    // 成功したらダッシュボードへ
+                    navController.navigate("dashboard_route")
+                }
+                is HomeViewModel.NavigationEvent.ShowError -> {
+                    // 失敗したらエラーメッセージを表示
+                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    // --- 3. 画面のレイアウト ---
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ユーザー名入力フィールド
-        OutlinedTextField(
+        TextField(
             value = username,
             onValueChange = { username = it },
-            label = { Text("ユーザー名") },
-            modifier = Modifier.fillMaxWidth()
+            label = { Text("ユーザー名") }
         )
+
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ルームに入るボタン
-        Button(
-            onClick = { showDialog = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Button(onClick = { showDialog = true }) { // 「ルームに入る」ボタン
             Text("ルームに入る")
         }
-
-        // ルーム参加ダイアログ
-        if (showDialog) {
-            AlertDialog(
-                onDismissRequest = { showDialog = false },
-                title = { Text("ルームに参加") },
-                text = {
-                    Column {
-                        OutlinedTextField(
-                            value = roomCode,
-                            onValueChange = { roomCode = it },
-                            label = { Text("合言葉") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (username.isBlank() || roomCode.isBlank()) {
-                                showRegistrationError = true
-                                return@Button
-                            }
-                            scope.launch {
-                                val success = roomManager.registerUserAndJoinOrCreateRoom(username, roomCode)
-                                if (success) {
-                                    showDialog = false
-                                    navController.navigate("dashboard_route") {
-                                        popUpTo("dashboard_route") { inclusive = true }
-                                    }
-                                } else {
-                                    showRegistrationError = true
-                                }
-                            }
-                        }
-                    ) {
-                        Text("入室")
-                    }
-                },
-                dismissButton = {
-                    Button(onClick = { showDialog = false }) {
-                        Text("キャンセル")
-                    }
-                }
-            )
-        }
-
-        // エラー表示ダイアログ
-        if (showRegistrationError) {
-            AlertDialog(
-                onDismissRequest = { showRegistrationError = false },
-                title = { Text("エラー") },
-                text = { Text("ユーザー名または合言葉が不正です。") },
-                confirmButton = {
-                    Button(onClick = { showRegistrationError = false }) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
     }
-}
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewUserRegistrationScreen() {
-    UserRegistrationScreen(rememberNavController())
+    // --- 4. 合言葉入力ダイアログの表示 ---
+    //    (showDialogがtrueのときだけ表示される)
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("合言葉の入力") },
+            text = {
+                TextField(
+                    value = roomCode,
+                    onValueChange = { roomCode = it },
+                    label = { Text("合言葉") }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // ViewModelの関数を呼び出す
+                        scope.launch {
+                            homeViewModel.joinRoom(username, roomCode)
+                        }
+                        showDialog = false // ダイアログを閉じる
+                    },
+                    // ユーザー名と合言葉が空でない場合のみボタンを有効化
+                    enabled = username.isNotBlank() && roomCode.isNotBlank()
+                ) {
+                    Text("入室")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showDialog = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
 }
