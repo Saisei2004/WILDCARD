@@ -1,6 +1,7 @@
 package com.example.wildcard.ui.dashboard
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,6 +44,7 @@ fun DashboardScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // ... (起床時間、残り時間、設定ボタンは変更なし) ...
         Text("起床時間", style = MaterialTheme.typography.titleMedium)
         val wakeupTimeFormatted = room?.wakeupTime?.let {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
@@ -61,20 +63,39 @@ fun DashboardScreen(
 
         Divider(modifier = Modifier.padding(vertical = 16.dp))
 
+        // --- 参加者リスト表示 ---
         Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
             items(users) { user ->
-                UserListItem(user)
+                // 現在時刻が起床時間を過ぎているか
+                val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
+
+                UserListItem(
+                    user = user,
+                    // 【変更点】クリック可能かどうかの判定を追加
+                    isClickable = isPunishmentTime && user.status != "woke_up",
+                    // 【変更点】クリックされた際の動作を定義
+                    onUserClick = { selectedUser ->
+                        navController.navigate("remote_control_route/${selectedUser.uid}")
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun UserListItem(user: User) {
+fun UserListItem(
+    user: User,
+    isClickable: Boolean, // クリック可能かどうかのフラグを受け取る
+    onUserClick: (User) -> Unit // クリック時のコールバック関数を受け取る
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = isClickable) { // isClickableがtrueの時のみクリック可能
+                onUserClick(user) // クリックされたら、渡された関数を実行
+            }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -86,8 +107,10 @@ fun UserListItem(user: User) {
                 "woke_up" -> "起床済み"
                 else -> ""
             },
-            color = when (user.status) {
-                "woke_up" -> MaterialTheme.colorScheme.primary
+            color = when {
+                // 【変更点】クリック可能なユーザー（お仕置き対象）は色を変えて分かりやすくする
+                isClickable -> MaterialTheme.colorScheme.error
+                user.status == "woke_up" -> MaterialTheme.colorScheme.primary
                 else -> LocalContentColor.current
             }
         )
