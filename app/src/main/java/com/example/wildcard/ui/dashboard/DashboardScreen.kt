@@ -15,8 +15,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import com.example.wildcard.data.model.User
+import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -27,9 +30,11 @@ fun DashboardScreen(
 ) {
     val room by viewModel.room.collectAsState()
     val users by viewModel.users.collectAsState()
-    val countdown by viewModel.countdown.collectAsState()
-    val context = LocalContext.current
+    // [追加] ViewModelから新しい状態を受け取る
+    val showMissionButton by viewModel.showMissionButton.collectAsState()
+    val currentUserStatus by viewModel.currentUserStatus.collectAsState()
 
+    val context = LocalContext.current
     val timePicker = TimePickerDialog(
         context,
         { _, hourOfDay, minute -> viewModel.setWakeupTime(hourOfDay, minute) },
@@ -38,63 +43,132 @@ fun DashboardScreen(
         true
     )
 
-    Column(
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 40.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 16.dp)
     ) {
-        // ... (起床時間、残り時間、設定ボタンは変更なし) ...
-        Text("起床時間", style = MaterialTheme.typography.titleMedium)
+        // [変更] 中央のコンテンツ用に参照を一つにまとめる
+        val (titleRef, timeRef, centerContentRef, listRef) = createRefs()
+        val guideline20 = createGuidelineFromTop(0.2f)
+        val guideline50 = createGuidelineFromTop(0.5f)
+
+        Text(
+            text = "起床時間",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.constrainAs(titleRef) {
+                centerHorizontallyTo(parent)
+                bottom.linkTo(guideline20)
+            }
+        )
+
         val wakeupTimeFormatted = room?.wakeupTime?.let {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
         } ?: "未設定"
-        Text(wakeupTimeFormatted, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = wakeupTimeFormatted,
+            fontSize = 60.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.constrainAs(timeRef) {
+                centerHorizontallyTo(parent)
+                top.linkTo(titleRef.bottom)
+            }
+        )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(countdown, fontSize = 32.sp)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = { timePicker.show() }) {
-            Text("起床時間を設定する")
+        // [変更] カウントダウン、設定ボタン、「起きた！」ボタンを１つのBoxにまとめ、表示を切り替える
+        Box(
+            modifier = Modifier.constrainAs(centerContentRef) {
+                top.linkTo(timeRef.bottom, margin = 8.dp)
+                bottom.linkTo(guideline50)
+                centerHorizontallyTo(parent)
+                width = Dimension.fillToConstraints
+            },
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                // 自分が起床済みの場合
+                currentUserStatus == "woke_up" -> {
+                    Text(
+                        text = "おはようございます！",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                // 時間になり、まだ起きていない場合
+                showMissionButton -> {
+                    Button(
+                        onClick = { viewModel.onWakeUpClicked() },
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(56.dp)
+                    ) {
+                        Text("起きた！", fontSize = 18.sp)
+                    }
+                }
+                // 起床時間になる前
+                else -> {
+                    val countdown by viewModel.countdown.collectAsState()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = countdown,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { timePicker.show() }) {
+                            Text("起床時間を設定する")
+                        }
+                    }
+                }
+            }
         }
 
-        Divider(modifier = Modifier.padding(vertical = 16.dp))
-
-        // --- 参加者リスト表示 ---
-        Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(users) { user ->
-                // 現在時刻が起床時間を過ぎているか
-                val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
-
-                UserListItem(
-                    user = user,
-                    // 【変更点】クリック可能かどうかの判定を追加
-                    isClickable = isPunishmentTime && user.status != "woke_up",
-                    // 【変更点】クリックされた際の動作を定義
-                    onUserClick = { selectedUser ->
-                        navController.navigate("remote_control_route/${selectedUser.uid}")
-                    }
-                )
+        // 参加者リストエリアは変更なし
+        Column(
+            modifier = Modifier.constrainAs(listRef) {
+                top.linkTo(guideline50)
+                bottom.linkTo(parent.bottom)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+                width = Dimension.fillToConstraints
+                height = Dimension.fillToConstraints
+            },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Divider()
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(users) { user ->
+                    val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
+                    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
+                    UserListItem(
+                        user = user,
+                        // [変更] 自分自身はクリックできないようにする
+                        isClickable = isPunishmentTime && user.status != "woke_up" && user.uid != currentUserId,
+                        onUserClick = { selectedUser ->
+                            navController.navigate("remote_control_route/${selectedUser.uid}")
+                        }
+                    )
+                }
             }
         }
     }
 }
 
+
 @Composable
 fun UserListItem(
     user: User,
-    isClickable: Boolean, // クリック可能かどうかのフラグを受け取る
-    onUserClick: (User) -> Unit // クリック時のコールバック関数を受け取る
+    isClickable: Boolean,
+    onUserClick: (User) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = isClickable) { // isClickableがtrueの時のみクリック可能
-                onUserClick(user) // クリックされたら、渡された関数を実行
+            .clickable(enabled = isClickable) {
+                onUserClick(user)
             }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -108,7 +182,6 @@ fun UserListItem(
                 else -> ""
             },
             color = when {
-                // 【変更点】クリック可能なユーザー（お仕置き対象）は色を変えて分かりやすくする
                 isClickable -> MaterialTheme.colorScheme.error
                 user.status == "woke_up" -> MaterialTheme.colorScheme.primary
                 else -> LocalContentColor.current

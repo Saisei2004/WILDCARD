@@ -1,5 +1,6 @@
 package com.example.wildcard.data
 
+import android.util.Log
 import com.example.wildcard.data.model.Room
 import com.example.wildcard.data.model.User
 import com.google.firebase.auth.FirebaseAuth
@@ -16,6 +17,8 @@ class FirebaseRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance() // ユーザーを匿名認証で一意に識別
+    // [修正] Cloud Firestoreのインスタンス名を 'db' に統一
+    private val db = FirebaseFirestore.getInstance()
 
     /**
      * 指定された合言葉でルームに参加または新規作成する
@@ -63,8 +66,6 @@ class FirebaseRepository {
             Result.failure(e)
         }
     }
-
-    // ↓↓↓↓↓↓ ここからが新しく追加する部分です ↓↓↓↓↓↓
 
     /**
      * 現在ログインしているユーザーの情報を取得する
@@ -121,5 +122,20 @@ class FirebaseRepository {
         firestore.collection("rooms").document(roomId).update("wakeupTime", newTime).await()
     }
 
-    // ↑↑↑↑↑↑ ここまでが新しく追加する部分です ↑↑↑↑↑↑
+    // ▼▼▼【この関数を追加】▼▼▼
+    /**
+     * 指定されたユーザーIDのステータスを更新します。
+     * @param userId 更新するユーザーの一意のID
+     * @param newStatus 新しい状態 ("waiting", "woke_up" など)
+     */
+    suspend fun updateUserStatus(userId: String, newStatus: String) {
+        try {
+            db.collection("users").document(userId)
+                .update("status", newStatus)
+                .await() // Firebaseの処理が完了するのを待つ
+        } catch (e: Exception) {
+            // エラーが発生した場合の処理（ログに出力するなど）
+            Log.e("FirebaseRepository", "Error updating user status for $userId", e)
+        }
+    }
 }
