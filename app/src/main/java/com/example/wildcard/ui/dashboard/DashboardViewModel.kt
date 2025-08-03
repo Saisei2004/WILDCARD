@@ -1,5 +1,6 @@
 package com.example.wildcard.ui.dashboard
 
+import android.content.Context
 import android.os.CountDownTimer
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -9,16 +10,23 @@ import com.example.wildcard.data.model.Room
 import com.example.wildcard.data.model.User
 import com.example.wildcard.service.ev3.Ev3Controller
 import com.example.wildcard.service.firebase.FirebaseService
+import com.example.wildcard.service.webrtc.CallManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
 
-class DashboardViewModel(private val roomId: String) : ViewModel() {
+class DashboardViewModel(
+    private val roomId: String,
+    private val applicationContext: Context? = null
+) : ViewModel() {
 
     private val firebaseService = FirebaseService(FirebaseFirestore.getInstance())
     private val firebaseAuth = FirebaseAuth.getInstance()
+
+    // WebRTC関連
+    private val callManager = applicationContext?.let { CallManager(it) }
 
     private val _room = MutableStateFlow<Room?>(null)
     val room: StateFlow<Room?> = _room.asStateFlow()
@@ -35,6 +43,9 @@ class DashboardViewModel(private val roomId: String) : ViewModel() {
     val currentUserStatus: StateFlow<String> = users.map { userList ->
         userList.find { it.uid == firebaseAuth.currentUser?.uid }?.status ?: ""
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    private val _isPublishing = MutableStateFlow(false)
+    val isPublishing: StateFlow<Boolean> = _isPublishing.asStateFlow()
 
     private var countDownTimer: CountDownTimer? = null
     private val ev3Controller = Ev3Controller()
@@ -56,6 +67,15 @@ class DashboardViewModel(private val roomId: String) : ViewModel() {
             }
         }
         listenToEv3Commands()
+        
+        // 起床時間になったら自動的に配信を開始
+        viewModelScope.launch {
+            showMissionButton.collect { shouldStartPublishing ->
+                if (shouldStartPublishing && !_isPublishing.value) {
+                    startPublishing()
+                }
+            }
+        }
     }
 
     private fun listenToEv3Commands() {
@@ -144,6 +164,49 @@ class DashboardViewModel(private val roomId: String) : ViewModel() {
         val userId = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
             firebaseService.updateUserStatus(userId, "woke_up")
+            // 起床したら配信を停止
+            stopPublishing()
+        }
+    }
+
+    /**
+     * WebRTCでの映像配信（映像のみ）を開始します
+     */
+    private fun startPublishing() {
+        val userId = firebaseAuth.currentUser?.uid ?: return
+        if (callManager == null) {
+            Log.e("Dashboard", "CallManager is null - cannot start publishing")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val roomName = "control_$userId"
+                val success = callManager.startPublishing(roomName)
+                if (success) {
+                    _isPublishing.value = true
+                    Log.d("Dashboard", "Started publishing to room: $roomName")
+                } else {
+                    Log.e("Dashboard", "Failed to start publishing")
+                }
+            } catch (e: Exception) {
+                Log.e("Dashboard", "Exception while starting publishing", e)
+            }
+        }
+    }
+
+    /**
+     * WebRTCでの映像配信（映像のみ）を停止します
+     */
+    private fun stopPublishing() {
+        viewModelScope.launch {
+            try {
+                callManager?.endCall()
+                _isPublishing.value = false
+                Log.d("Dashboard", "Stopped publishing")
+            } catch (e: Exception) {
+                Log.e("Dashboard", "Exception while stopping publishing", e)
+            }
         }
     }
 
@@ -151,5 +214,8 @@ class DashboardViewModel(private val roomId: String) : ViewModel() {
         super.onCleared()
         countDownTimer?.cancel()
         ev3Controller.sendRequest("/stop")
+        viewModelScope.launch {
+            callManager?.endCall()
+        }
     }
 }
