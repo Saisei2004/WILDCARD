@@ -1,47 +1,199 @@
 package com.example.wildcard.service.webrtc
 
-import com.example.wildcard.service.firebase.FirebaseService
-// import org.webrtc.*
+import android.content.Context
+import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.example.wildcard.utils.Constants
+import com.ntt.skyway.core.SkyWayContext
+import com.ntt.skyway.core.content.Stream
+import com.ntt.skyway.core.content.local.LocalVideoStream
+import com.ntt.skyway.core.content.local.source.CameraSource
+import com.ntt.skyway.core.content.remote.RemoteVideoStream
+import com.ntt.skyway.core.util.Logger
+import com.ntt.skyway.room.RoomPublication
+import com.ntt.skyway.room.member.LocalRoomMember
+import com.ntt.skyway.room.member.RoomMember
+import com.ntt.skyway.room.p2p.P2PRoom
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /**
- * WebRTC通話管理マネージャー
+ * SkyWayベースのWebRTC通話管理マネージャー
  *
- * WebRTC接続の確立、映像ストリーミングの開始・停止、
- * シグナリングメッセージの送受信などを管理します。
+ * SkyWayを使用してWebRTC接続の確立、映像ストリーミング（映像のみ）の開始・停止を管理します。
  */
 class CallManager(
-    private val firebaseService: FirebaseService
+    private val applicationContext: Context
 ) {
+    // SkyWayContext.Optionsの設定
+    private val option = SkyWayContext.Options(
+        logLevel = Logger.LogLevel.VERBOSE
+    )
 
-    // TODO: PeerConnectionFactory, PeerConnection, VideoTrackなどのWebRTC関連オブジェクトを保持
+    // SkyWayの認証・認可に利用するIDとキー
+    private val appId = Constants.SKYWAY_APP_ID
+    private val secretKey = Constants.SKYWAY_SECRET_KEY
+
+    // SkyWayの各種オブジェクトを保持する変数
+    private var localRoomMember: LocalRoomMember? = null
+    private var room: P2PRoom? = null
+
+    // コルーチンスコープ
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // 状態管理
+    var localVideoStream by mutableStateOf<LocalVideoStream?>(null)
+        private set
+    var remoteVideoStream by mutableStateOf<RemoteVideoStream?>(null)
+        private set
 
     /**
-     * 一方向の映像ストリームを開始します。
-     * @param targetUserId 映像を送信する対象のユーザーID
+     * 配信者として映像ストリーム（映像のみ）を開始します。
+     * @param roomName 参加するルーム名
      * @return 成功した場合はtrue、失敗した場合はfalse
      */
-    suspend fun startOneWayVideoStream(targetUserId: String): Boolean {
-        // TODO: WebRTCピアコネクションを初期化
-        // TODO: ローカルの映像トラックを作成し、ピアコネクションに追加
-        // TODO: Offerを作成し、FirebaseServiceを介してtargetUserIdに送信
-        // TODO: ICE Candidateを収集し、FirebaseServiceを介してtargetUserIdに送信
-        // TODO: リモートからのAnswerとICE Candidateを受信し、ピアコネクションに追加
-        return true // 仮
+    suspend fun startPublishing(roomName: String): Boolean {
+        return try {
+            val result = SkyWayContext.setupForDev(applicationContext, appId, secretKey, option)
+            if (!result) {
+                Log.e("CallManager", "SkyWay setup failed")
+                return false
+            }
+
+            // カメラの設定と開始
+            val device = CameraSource.getBackCameras(applicationContext).firstOrNull()
+            if (device == null) {
+                Log.e("CallManager", "No back camera found")
+                return false
+            }
+
+            val cameraOption = CameraSource.CapturingOptions(160, 160, 5)
+            CameraSource.startCapturing(applicationContext, device, cameraOption)
+            
+            withContext(Dispatchers.Main) {
+                localVideoStream = CameraSource.createStream()
+            }
+
+            // ルームに参加
+            room = P2PRoom.findOrCreate(name = roomName)
+            val memberInit = RoomMember.Init(name = "publisher_${UUID.randomUUID()}")
+            localRoomMember = room?.join(memberInit)
+
+            // 映像を公開
+            localVideoStream?.let { stream ->
+                localRoomMember?.publish(stream)
+            }
+
+            Log.d("CallManager", "Publishing started successfully")
+            true
+        } catch (e: Exception) {
+            Log.e("CallManager", "Failed to start publishing", e)
+            false
+        }
+    }
+
+    /**
+     * 視聴者として映像ストリーム（映像のみ）を受信します。
+     * @param roomName 参加するルーム名
+     * @return 成功した場合はtrue、失敗した場合はfalse
+     */
+    suspend fun startViewing(roomName: String): Boolean {
+        return try {
+            val result = SkyWayContext.setupForDev(applicationContext, appId, secretKey, option)
+            if (!result) {
+                Log.e("CallManager", "SkyWay setup failed")
+                return false
+            }
+
+            // ルームに参加
+            room = P2PRoom.findOrCreate(name = roomName)
+            val memberInit = RoomMember.Init(name = "viewer_${UUID.randomUUID()}")
+            localRoomMember = room?.join(memberInit)
+
+            // 新しいストリームが公開された時のハンドラ
+            room?.onStreamPublishedHandler = { publication ->
+                if (publication.publisher?.id != localRoomMember?.id) {
+                    scope.launch {
+                        subscribe(publication)
+                    }
+                }
+            }
+
+            // 既に公開されているストリームを購読
+            room?.publications?.forEach { publication ->
+                if (publication.publisher?.id != localRoomMember?.id) {
+                    scope.launch {
+                        subscribe(publication)
+                    }
+                }
+            }
+
+            Log.d("CallManager", "Viewing started successfully")
+            true
+        } catch (e: Exception) {
+            Log.e("CallManager", "Failed to start viewing", e)
+            false
+        }
+    }
+
+    /**
+     * ストリームを購読する
+     */
+    private suspend fun subscribe(publication: RoomPublication) {
+        try {
+            val subscription = localRoomMember?.subscribe(publication)
+            subscription?.stream?.let { stream ->
+                if (stream.contentType == Stream.ContentType.VIDEO) {
+                    withContext(Dispatchers.Main) {
+                        remoteVideoStream = stream as RemoteVideoStream
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CallManager", "Failed to subscribe to stream", e)
+        }
     }
 
     /**
      * WebRTC接続を終了します。
      */
-    fun endCall() {
-        // TODO: WebRTCピアコネクションをクローズし、リソースを解放
-    }
+    suspend fun endCall() {
+        try {
+            val roomToLeave = room ?: return
+            val memberToLeave = localRoomMember ?: return
 
-    /**
-     * シグナリングメッセージを受信した際の処理です。
-     * @param message 受信したシグナリングメッセージ
-     */
-    fun onSignalingMessageReceived(message: Map<String, Any>) {
-        // TODO: 受信したメッセージの種類（Offer, Answer, ICE Candidate）に応じて処理を分岐
-        // TODO: SDPをセットしたり、ICE Candidateを追加したりする
+            // 公開しているストリームを停止
+            memberToLeave.publications.forEach {
+                memberToLeave.unpublish(it)
+            }
+
+            // ルームから退出
+            memberToLeave.leave()
+
+            // 状態をリセット
+            withContext(Dispatchers.Main) {
+                localVideoStream = null
+                remoteVideoStream = null
+            }
+
+            // リソースを解放
+            roomToLeave.dispose()
+            room = null
+            localRoomMember = null
+
+            // コルーチンスコープをキャンセル
+            scope.cancel()
+
+            Log.d("CallManager", "Call ended successfully")
+        } catch (e: Exception) {
+            Log.e("CallManager", "Failed to end call", e)
+        }
     }
 }

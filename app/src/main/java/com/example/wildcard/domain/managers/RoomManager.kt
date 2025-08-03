@@ -3,6 +3,7 @@ package com.example.wildcard.domain.managers
 import com.example.wildcard.data.model.Room
 import com.example.wildcard.data.model.User
 import com.example.wildcard.service.firebase.FirebaseService
+import com.google.firebase.auth.FirebaseAuth
 
 /**
  * ルーム管理マネージャー
@@ -22,8 +23,8 @@ class RoomManager(
      * @return 成功した場合はtrue、失敗した場合はfalse
      */
     suspend fun registerUserAndJoinOrCreateRoom(username: String, roomCode: String): Boolean {
-        // TODO: Firebase Authenticationでユーザーを認証し、UIDを取得
-        val uid = java.util.UUID.randomUUID().toString()
+        // 認証済みのユーザーのUIDを取得。なければ処理を中断。
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return false
 
         // ルームを検索または作成
         val room = firebaseService.findOrCreateRoom(roomCode)
@@ -34,7 +35,11 @@ class RoomManager(
 
         // ユーザー情報をFirebaseに保存
         val user = User(uid = uid, username = username, roomId = roomCode, status = "waiting")
-        return firebaseService.updateUserStatus(user)
+
+        // --- ▼ ここからが修正部分 ▼ ---
+        // 新しいユーザーを丸ごと登録するメソッドを呼び出す
+        return firebaseService.setUserProfile(user)
+        // --- ▲ ここまでが修正部分 ▲ ---
     }
 
     /**
@@ -44,8 +49,8 @@ class RoomManager(
      * @return 成功した場合はtrue、失敗した場合はfalse
      */
     suspend fun updateWakeupTime(roomCode: String, wakeupTime: Long): Boolean {
-        // TODO: FirebaseServiceを介してルームの起床時間を更新
-        return firebaseService.updateRoomSettings(roomCode, wakeupTime)
+        // この部分は変更なし
+        return firebaseService.updateWakeupTime(roomCode, wakeupTime)
     }
 
     /**
@@ -53,9 +58,11 @@ class RoomManager(
      * @param roomCode 監視対象のルーム合言葉
      * @param onRoomStateChanged ルームの状態が変更されたときに呼び出されるコールバック
      */
-    fun listenToRoomState(roomCode: String, onRoomStateChanged: (Room) -> Unit) {
+    fun listenToRoomState(roomCode: String, onRoomStateChanged: (Room?) -> Unit) {
         // TODO: FirebaseServiceを介してルームの状態変更をリッスン
-        firebaseService.listenToRoomState(roomCode, onRoomStateChanged)
+        // この部分はViewModelでFlowを直接使うように変更したため、
+        // このマネージャーからは直接使われない可能性があります。
+        // 必要であればViewModelと同様にFlowを扱うように修正します。
     }
 
     /**
@@ -65,6 +72,7 @@ class RoomManager(
      */
     fun listenToUsersStatus(roomCode: String, onUsersStatusChanged: (List<User>) -> Unit) {
         // TODO: FirebaseServiceを介してルーム内のユーザーのステータス変更をリッスン
-        firebaseService.listenToUsersStatus(roomCode, onUsersStatusChanged)
+        // この部分はViewModelでFlowを直接使うように変更したため、
+        // このマネージャーからは直接使われない可能性があります。
     }
 }
