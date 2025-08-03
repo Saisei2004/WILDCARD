@@ -1,22 +1,49 @@
 package com.example.wildcard.ui.registration
 
 import android.widget.Toast
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.wildcard.ui.navigation.AppScreen
+import com.example.wildcard.R // Rクラスをインポートしてください
 import com.example.wildcard.ui.screens.HomeViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+// --- テーマカラーパレット ---
+private val MorningSkyBrush = Brush.verticalGradient(
+    colors = listOf(Color(0xFF81D4FA), Color(0xFFB3E5FC), Color(0xFFFFE0B2))
+)
+private val ButtonBrush = Brush.radialGradient(
+    colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20)), // 深緑のグラデーション
+    radius = 400f
+)
+private val ButtonTextColor = Color.White
+private val DarkTextColor = Color(0xFF263238)
+private val AccentColor = Color(0xFF2E7D32)
+
 @Composable
 fun UserRegistrationScreen(
     navController: NavController,
@@ -29,11 +56,12 @@ fun UserRegistrationScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // ViewModelからのナビゲーションイベントを監視
     LaunchedEffect(Unit) {
         homeViewModel.navigationEvent.collect { event ->
             when (event) {
                 is HomeViewModel.NavigationEvent.NavigateToDashboard -> {
-                    navController.navigate("dashboard_route/${event.roomId}")
+                    navController.navigate(AppScreen.Dashboard.createRoute(event.roomId))
                 }
                 is HomeViewModel.NavigationEvent.ShowError -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
@@ -42,84 +70,174 @@ fun UserRegistrationScreen(
         }
     }
 
-    ConstraintLayout(
+    // --- UI部分 ---
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(MorningSkyBrush)
     ) {
-        val (titleRef, formRef) = createRefs()
-
-        // [変更] タイトル用のガイドラインを上から30%の位置に修正
-        val titleGuideline = createGuidelineFromTop(0.3f)
-        // [変更] 入力フォーム用のガイドラインを上から55%（中央より少し下）の位置に作成
-        val formGuideline = createGuidelineFromTop(0.55f)
-
-        // タイトルを30%の位置に配置
-        Text(
-            text = "コケコッコー",
-            fontSize = 48.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.constrainAs(titleRef) {
-                centerHorizontallyTo(parent)
-                // [変更] 参照するガイドラインを変更
-                top.linkTo(titleGuideline)
-                bottom.linkTo(titleGuideline)
-            }
+        val infiniteTransition = rememberInfiniteTransition(label = "logo-bounce")
+        val logoOffsetY by infiniteTransition.animateValue(
+            initialValue = (-10).dp,
+            targetValue = 10.dp,
+            typeConverter = Dp.VectorConverter,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 2500, easing = EaseInOut),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "logo-bounce-offset"
         )
 
-        // 入力フォームを55%の位置（中央より少し下）に配置
         Column(
-            modifier = Modifier.constrainAs(formRef) {
-                centerHorizontallyTo(parent)
-                // [変更] 参照するガイドラインを変更
-                top.linkTo(formGuideline)
-                bottom.linkTo(formGuideline)
-            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            TextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("ユーザー名") }
+            // 1. ロゴ (上部のスペース)
+            Spacer(modifier = Modifier.weight(1f))
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "Sleep Buster Logo",
+                modifier = Modifier
+                    .size(280.dp)
+                    .offset(y = logoOffsetY)
+                    .shadow(elevation = 24.dp, shape = CircleShape),
+                contentScale = ContentScale.Fit
             )
+            Spacer(modifier = Modifier.weight(0.5f))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(onClick = { showDialog = true }) {
-                Text("ルームに入る")
+            // 2. 入力フォームとボタン (中央に配置)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "ユーザー名",
+                    color = DarkTextColor.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    shape = CircleShape,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.White.copy(alpha = 0.9f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.6f),
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = AccentColor,
+                    ),
+                    textStyle = TextStyle(color = DarkTextColor, fontSize = 16.sp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        if (username.isNotBlank()) {
+                            showDialog = true
+                        } else {
+                            Toast.makeText(context, "ユーザー名を入力してください", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .shadow(elevation = 8.dp, shape = CircleShape),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(ButtonBrush),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "ルームに入る",
+                            color = ButtonTextColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+                    }
+                }
             }
+            // 3. 下部のスペース
+            Spacer(modifier = Modifier.weight(1.5f))
         }
     }
 
+    // ルームコード入力ダイアログ
     if (showDialog) {
-        AlertDialog(
+        StyledAlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("合言葉の入力") },
-            text = {
-                TextField(
-                    value = roomCode,
-                    onValueChange = { roomCode = it },
-                    label = { Text("合言葉") }
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        scope.launch {
-                            homeViewModel.joinRoom(username, roomCode)
-                        }
-                        showDialog = false
-                    },
-                    enabled = username.isNotBlank() && roomCode.isNotBlank()
-                ) {
-                    Text("入室")
+            title = "合言葉の入力",
+            roomCode = roomCode,
+            onRoomCodeChange = { roomCode = it },
+            onConfirm = {
+                scope.launch {
+                    homeViewModel.joinRoom(username, roomCode)
                 }
+                showDialog = false
             },
-            dismissButton = {
-                Button(onClick = { showDialog = false }) {
-                    Text("キャンセル")
-                }
-            }
+            isConfirmEnabled = username.isNotBlank() && roomCode.isNotBlank()
         )
     }
+}
+
+/**
+ * カスタムスタイルを適用したAlertDialog
+ */
+@Composable
+private fun StyledAlertDialog(
+    onDismissRequest: () -> Unit,
+    title: String,
+    roomCode: String,
+    onRoomCodeChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    isConfirmEnabled: Boolean
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White,
+        title = {
+            Text(title, fontWeight = FontWeight.Bold, color = DarkTextColor)
+        },
+        text = {
+            TextField(
+                value = roomCode,
+                onValueChange = onRoomCodeChange, // ★ エラー修正: { roomCode = it } -> onRoomCodeChange
+                label = { Text("合言葉") },
+                shape = CircleShape,
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.LightGray.copy(alpha = 0.5f),
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = AccentColor,
+                    cursorColor = AccentColor,
+                ),
+                textStyle = TextStyle(color = DarkTextColor, fontSize = 16.sp)
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = isConfirmEnabled,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+            ) {
+                Text("入室", color = ButtonTextColor)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("キャンセル", color = Color.Gray)
+            }
+        }
+    )
 }

@@ -1,27 +1,62 @@
 package com.example.wildcard.ui.dashboard
 
 import android.app.TimePickerDialog
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import com.example.wildcard.data.model.User
+import com.example.wildcard.ui.navigation.AppScreen
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.random.Random
+
+// --- テーマカラーパレット ---
+private val MorningSkyBrush = Brush.verticalGradient(
+    colors = listOf(Color(0xFF81D4FA), Color(0xFFB3E5FC), Color(0xFFFFE0B2))
+)
+private val NightSkyWithGroundBrush = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.0f to Color(0xFF0D47A1),
+        0.7f to Color(0xFF1976D2),
+        1.0f to Color(0xFF4A2300)
+    )
+)
+private val ButtonBrush = Brush.radialGradient(
+    colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20)),
+    radius = 400f
+)
+private val ButtonTextColor = Color.White
+private val DarkTextColor = Color(0xFF263238)
 
 @Composable
 fun DashboardScreen(
@@ -30,10 +65,94 @@ fun DashboardScreen(
 ) {
     val room by viewModel.room.collectAsState()
     val users by viewModel.users.collectAsState()
-    // [追加] ViewModelから新しい状態を受け取る
-    val showMissionButton by viewModel.showMissionButton.collectAsState()
+    val isMorningPhase by viewModel.isMorningPhase.collectAsState()
     val currentUserStatus by viewModel.currentUserStatus.collectAsState()
 
+    Crossfade(targetState = isMorningPhase, animationSpec = tween(1500), label = "PhaseChange") { isMorning ->
+        val backgroundBrush = if (isMorning) MorningSkyBrush else NightSkyWithGroundBrush
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundBrush)
+        ) {
+            if (!isMorning) {
+                StarsAnimation()
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (room == null) {
+                    Box(modifier = Modifier.weight(0.9f), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.White)
+                    }
+                } else {
+                    // 上部の時刻表示エリア
+                    Column(
+                        modifier = Modifier.weight(0.9f), // ★ 変更: 上部の比率を調整
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        if (isMorning) {
+                            MorningPhaseContent(viewModel = viewModel, currentUserStatus = currentUserStatus)
+                        } else {
+                            NightPhaseContent(viewModel = viewModel)
+                        }
+                    }
+                }
+
+                // 下部の参加者リストエリア
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.1f) // ★ 変更: 下部の比率を調整
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            "参加者リスト",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkTextColor
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider()
+                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                            items(users) { user ->
+                                val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
+                                val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
+                                UserListItem(
+                                    user = user,
+                                    isPunishmentTime = isPunishmentTime,
+                                    isClickable = isPunishmentTime && user.status != "woke_up" && user.uid != currentUserId,
+                                    onUserClick = { selectedUser ->
+                                        navController.navigate(AppScreen.RemoteControl.createRoute(selectedUser.uid))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NightPhaseContent(viewModel: DashboardViewModel) {
+    val room by viewModel.room.collectAsState()
+    val countdownHoursMinutes by viewModel.countdownHoursMinutes.collectAsState()
+    var showResetDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val timePicker = TimePickerDialog(
         context,
@@ -43,124 +162,141 @@ fun DashboardScreen(
         true
     )
 
-    ConstraintLayout(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
+    Text(
+        text = "起床予定時間",
+        fontSize = 24.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color.White
+    )
+
+    val wakeupTimeFormatted = room?.wakeupTime?.takeIf { it > 0 }?.let {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+    } ?: "--:--"
+    Text(
+        text = wakeupTimeFormatted,
+        fontSize = 90.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color.White
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Text(
+        text = if (room?.wakeupTime == 0L) "時間を設定してください" else "起床まで $countdownHoursMinutes",
+        fontSize = 20.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color.White
+    )
+    Spacer(modifier = Modifier.height(24.dp))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(0.9f),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // [変更] 中央のコンテンツ用に参照を一つにまとめる
-        val (titleRef, timeRef, centerContentRef, listRef) = createRefs()
-        val guideline20 = createGuidelineFromTop(0.2f)
-        val guideline50 = createGuidelineFromTop(0.5f)
-
-        Text(
-            text = "起床時間",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.constrainAs(titleRef) {
-                centerHorizontallyTo(parent)
-                bottom.linkTo(guideline20)
-            }
-        )
-
-        val wakeupTimeFormatted = room?.wakeupTime?.let {
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
-        } ?: "未設定"
-        Text(
-            text = wakeupTimeFormatted,
-            fontSize = 60.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.constrainAs(timeRef) {
-                centerHorizontallyTo(parent)
-                top.linkTo(titleRef.bottom)
-            }
-        )
-
-        // [変更] カウントダウン、設定ボタン、「起きた！」ボタンを１つのBoxにまとめ、表示を切り替える
-        Box(
-            modifier = Modifier.constrainAs(centerContentRef) {
-                top.linkTo(timeRef.bottom, margin = 8.dp)
-                bottom.linkTo(guideline50)
-                centerHorizontallyTo(parent)
-                width = Dimension.fillToConstraints
-            },
-            contentAlignment = Alignment.Center
+        LargeButton(text = "時間変更", onClick = { timePicker.show() }, modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.width(16.dp))
+        OutlinedButton(
+            onClick = { showResetDialog = true },
+            shape = CircleShape,
+            modifier = Modifier.size(60.dp),
+            contentPadding = PaddingValues(0.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+            border = BorderStroke(2.dp, Color.White)
         ) {
-            when {
-                // 自分が起床済みの場合
-                currentUserStatus == "woke_up" -> {
-                    Text(
-                        text = "おはようございます！",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // 時間になり、まだ起きていない場合
-                showMissionButton -> {
-                    Button(
-                        onClick = { viewModel.onWakeUpClicked() },
-                        modifier = Modifier
-                            .fillMaxWidth(0.7f)
-                            .height(56.dp)
-                    ) {
-                        Text("起きた！", fontSize = 18.sp)
-                    }
-                }
-                // 起床時間になる前
-                else -> {
-                    val countdown by viewModel.countdown.collectAsState()
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = countdown,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = { timePicker.show() }) {
-                            Text("起床時間を設定する")
-                        }
-                    }
-                }
-            }
+            Icon(Icons.Default.Refresh, contentDescription = "時間をリセット")
         }
+    }
 
-        // 参加者リストエリアは変更なし
-        Column(
-            modifier = Modifier.constrainAs(listRef) {
-                top.linkTo(guideline50)
-                bottom.linkTo(parent.bottom)
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-                width = Dimension.fillToConstraints
-                height = Dimension.fillToConstraints
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("確認") },
+            text = { Text("起床時間をリセットしますか？") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.resetWakeupTime()
+                    showResetDialog = false
+                }) { Text("リセット") }
             },
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Divider()
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(users) { user ->
-                    val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
-                    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
-                    UserListItem(
-                        user = user,
-                        // [変更] 自分自身はクリックできないようにする
-                        isClickable = isPunishmentTime && user.status != "woke_up" && user.uid != currentUserId,
-                        onUserClick = { selectedUser ->
-                            navController.navigate("remote_control_route/${selectedUser.uid}")
-                        }
-                    )
-                }
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("キャンセル") }
             }
+        )
+    }
+}
+
+@Composable
+private fun MorningPhaseContent(viewModel: DashboardViewModel, currentUserStatus: String) {
+    val room by viewModel.room.collectAsState()
+
+    Text(
+        text = "起床予定時間",
+        fontSize = 24.sp,
+        fontWeight = FontWeight.Bold,
+        color = DarkTextColor
+    )
+
+    val wakeupTimeFormatted = room?.wakeupTime?.takeIf { it > 0 }?.let {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+    } ?: "--:--"
+    Text(
+        text = wakeupTimeFormatted,
+        fontSize = 90.sp,
+        fontWeight = FontWeight.Bold,
+        color = DarkTextColor
+    )
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    Box(modifier = Modifier.height(84.dp), contentAlignment = Alignment.Center) {
+        if (currentUserStatus == "woke_up") {
+            Text(
+                text = "おはようございます！",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = DarkTextColor
+            )
+        } else {
+            LargeButton(
+                text = "起きた！",
+                onClick = { viewModel.onWakeUpClicked() },
+                modifier = Modifier.width(200.dp)
+            )
         }
     }
 }
 
+@Composable
+private fun LargeButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .height(60.dp)
+            .shadow(elevation = 8.dp, shape = CircleShape),
+        shape = CircleShape,
+        contentPadding = PaddingValues(0.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(ButtonBrush),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                color = ButtonTextColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        }
+    }
+}
 
 @Composable
 fun UserListItem(
     user: User,
+    isPunishmentTime: Boolean,
     isClickable: Boolean,
     onUserClick: (User) -> Unit
 ) {
@@ -170,22 +306,89 @@ fun UserListItem(
             .clickable(enabled = isClickable) {
                 onUserClick(user)
             }
-            .padding(vertical = 8.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(user.username, modifier = Modifier.weight(1f))
         Text(
-            text = when (user.status) {
-                "waiting" -> "待機中"
-                "mission" -> "ミッション中"
-                "woke_up" -> "起床済み"
-                else -> ""
-            },
-            color = when {
-                isClickable -> MaterialTheme.colorScheme.error
-                user.status == "woke_up" -> MaterialTheme.colorScheme.primary
-                else -> LocalContentColor.current
-            }
+            user.username,
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = DarkTextColor
+        )
+        val statusText = when {
+            user.status == "woke_up" -> "起床"
+            isPunishmentTime -> "未起床"
+            else -> "待機中"
+        }
+        val statusColor = when {
+            isClickable -> MaterialTheme.colorScheme.error
+            user.status == "woke_up" -> Color(0xFF2E7D32)
+            else -> Color.Gray
+        }
+        Text(
+            text = statusText,
+            color = statusColor,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp
         )
     }
 }
+
+@Composable
+private fun StarsAnimation() {
+    val stars = remember {
+        List(100) {
+            Star(
+                x = Random.nextFloat(),
+                y = Random.nextFloat(),
+                alpha = Animatable(0f)
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        stars.forEach { star ->
+            launch {
+                star.alpha.animateTo(
+                    targetValue = Random.nextFloat(),
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = (Random.nextFloat() * 3000 + 1000).toInt(),
+                            easing = LinearEasing
+                        ),
+                        repeatMode = RepeatMode.Reverse
+                    )
+                )
+            }
+        }
+    }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color.White, Color.White.copy(alpha = 0.5f), Color.Transparent),
+                center = Offset(size.width * 0.8f, size.height * 0.2f),
+                radius = 100f
+            ),
+            center = Offset(size.width * 0.8f, size.height * 0.2f),
+            radius = 100f
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.8f),
+            center = Offset(size.width * 0.8f, size.height * 0.2f),
+            radius = 50f
+        )
+
+        stars.forEach { star ->
+            drawCircle(
+                color = Color.White,
+                center = Offset(star.x * size.width, star.y * size.height * 0.7f),
+                radius = Random.nextFloat() * 2f + 1f,
+                alpha = star.alpha.value
+            )
+        }
+    }
+}
+
+private data class Star(val x: Float, val y: Float, val alpha: Animatable<Float, AnimationVector1D>)
