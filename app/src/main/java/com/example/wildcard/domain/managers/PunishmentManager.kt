@@ -1,8 +1,10 @@
 package com.example.wildcard.domain.managers
 
+import com.example.wildcard.data.model.ControlCommand
 import com.example.wildcard.service.firebase.FirebaseService
 import com.example.wildcard.service.webrtc.CallManager
 import com.example.wildcard.service.bluetooth.BluetoothService
+import com.google.firebase.auth.FirebaseAuth
 
 /**
  * お仕置き機能管理マネージャー
@@ -35,11 +37,26 @@ class PunishmentManager(
     /**
      * EV3への操作コマンドを送信します。
      * @param targetUserId 操作対象のユーザーID
-     * @param controlData 送信する操作データ（例: "forward", "backward", "left", "right", "punish"）
+     * @param controlData 送信する操作データ（例: "forward", "backward", "punish"）
      */
     suspend fun sendControlCommand(targetUserId: String, controlData: String) {
-        // TODO: FirebaseServiceを介して対象ユーザーのスマホに操作データを送信
-        firebaseService.sendPunishmentCommand(targetUserId, controlData)
+        // --- ▼ ここからが修正部分 ▼ ---
+
+        // 送信者のIDを取得
+        val senderId = FirebaseAuth.getInstance().currentUser?.uid ?: "unknown_sender"
+
+        // 新しいコマンド形式(ControlCommand)に変換する
+        // controlDataが "punish" の場合はactionに、それ以外はdirectionにセットする
+        val command = if (controlData == "punish") {
+            ControlCommand(senderId = senderId, action = "hammer_strike")
+        } else {
+            ControlCommand(senderId = senderId, direction = controlData)
+        }
+
+        // 新しいメソッドを呼び出す
+        firebaseService.sendControlCommand(targetUserId, command)
+
+        // --- ▲ ここまでが修正部分 ▲ ---
     }
 
     /**
@@ -47,6 +64,7 @@ class PunishmentManager(
      * @param targetUserId 操作対象のユーザーID
      */
     suspend fun triggerPunishAction(targetUserId: String) {
+        // この関数は変更なしで、上記のsendControlCommandを正しく呼び出します
         sendControlCommand(targetUserId, "punish")
     }
 }
