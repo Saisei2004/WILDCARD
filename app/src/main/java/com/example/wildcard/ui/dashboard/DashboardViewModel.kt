@@ -2,7 +2,6 @@ package com.example.wildcard.ui.dashboard
 
 import android.content.Context
 import android.os.CountDownTimer
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.wildcard.data.model.ControlCommand
@@ -35,9 +34,16 @@ class DashboardViewModel(
     private val _countdownHoursMinutes = MutableStateFlow("00:00")
     val countdownHoursMinutes: StateFlow<String> = _countdownHoursMinutes.asStateFlow()
 
-    // 「朝フェーズ」かどうかを判定するStateFlow
-    private val _isMorningPhase = MutableStateFlow(false)
-    val isMorningPhase: StateFlow<Boolean> = _isMorningPhase.asStateFlow()
+    // 通常の朝フェーズ判定（時間ベース）
+    private val _computedMorningPhase = MutableStateFlow(false)
+    // 強制的に朝フェーズにするオーバーライド（デバッグ用）
+    private val _forcedMorning = MutableStateFlow(false)
+    // 実際に使う朝フェーズ（通常 OR 強制）
+    val isMorningPhase: StateFlow<Boolean> = combine(
+        _computedMorningPhase,
+        _forcedMorning
+    ) { computed, forced -> computed || forced }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val currentUserStatus: StateFlow<String> = users.map { userList ->
         userList.find { it.uid == firebaseAuth.currentUser?.uid }?.status ?: ""
@@ -108,8 +114,8 @@ class DashboardViewModel(
         val remainingTime = wakeupTime - currentTime
         val oneHourInMillis = 3600 * 1000
 
-        // 朝フェーズの判定ロジック
-        _isMorningPhase.value = wakeupTime > 0 && currentTime >= wakeupTime && currentTime < (wakeupTime + oneHourInMillis)
+        _computedMorningPhase.value =
+            wakeupTime > 0 && currentTime >= wakeupTime && currentTime < (wakeupTime + oneHourInMillis)
 
         if (remainingTime > 0) {
             countDownTimer = object : CountDownTimer(remainingTime, 1000) {
@@ -119,12 +125,13 @@ class DashboardViewModel(
                     _countdownHoursMinutes.value = String.format("%02d:%02d", hours, minutes)
 
                     val now = System.currentTimeMillis()
-                    _isMorningPhase.value = wakeupTime > 0 && now >= wakeupTime && now < (wakeupTime + oneHourInMillis)
+                    _computedMorningPhase.value =
+                        wakeupTime > 0 && now >= wakeupTime && now < (wakeupTime + oneHourInMillis)
                 }
 
                 override fun onFinish() {
                     _countdownHoursMinutes.value = "00:00"
-                    _isMorningPhase.value = true
+                    _computedMorningPhase.value = true
                 }
             }.start()
         } else {
@@ -138,9 +145,7 @@ class DashboardViewModel(
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            if (before(Calendar.getInstance())) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
+            if (before(Calendar.getInstance())) add(Calendar.DAY_OF_YEAR, 1)
         }
         val newTime = calendar.timeInMillis
         viewModelScope.launch {
@@ -148,7 +153,6 @@ class DashboardViewModel(
         }
     }
 
-    // 時間をリセットする関数
     fun resetWakeupTime() {
         viewModelScope.launch {
             firebaseService.updateWakeupTime(roomId, 0L)
@@ -156,28 +160,28 @@ class DashboardViewModel(
     }
 
     fun onWakeUpClicked() {
-        val userId = firebaseAuth.currentUser?.uid ?: return
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
             firebaseService.updateUserStatus(userId, "woke_up")
             stopPublishing()
         }
     }
 
+    /** デバッグ用：強制的に朝フェーズに移す */
+    fun forceMorningPhase() {
+        _forcedMorning.value = true
+    }
+
     private fun startPublishing() {
-        val userId = firebaseAuth.currentUser?.uid ?: return
-        if (callManager == null) {
-            Log.e("Dashboard", "CallManager is null - cannot start publishing")
-            return
-        }
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        if (callManager == null) return
         viewModelScope.launch {
             try {
                 val roomName = "control_$userId"
                 val success = callManager.startPublishing(roomName)
-                if (success) {
-                    _isPublishing.value = true
-                }
-            } catch (e: Exception) {
-                Log.e("Dashboard", "Exception while starting publishing", e)
+                if (success) _isPublishing.value = true
+            } catch (_: Exception) {
+                // no-op
             }
         }
     }
@@ -187,8 +191,8 @@ class DashboardViewModel(
             try {
                 callManager?.endCall()
                 _isPublishing.value = false
-            } catch (e: Exception) {
-                Log.e("Dashboard", "Exception while stopping publishing", e)
+            } catch (_: Exception) {
+                // no-op
             }
         }
     }
