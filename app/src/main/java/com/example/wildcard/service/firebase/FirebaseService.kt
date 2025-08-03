@@ -1,5 +1,6 @@
 package com.example.wildcard.service.firebase
 
+import com.example.wildcard.data.model.ControlCommand // この行を追加
 import com.example.wildcard.data.model.Room
 import com.example.wildcard.data.model.User
 import com.google.firebase.firestore.FirebaseFirestore
@@ -18,6 +19,7 @@ class FirebaseService(
 
     private val roomsCollection = firestore.collection("rooms")
     private val usersCollection = firestore.collection("users")
+    private val commandsCollection = firestore.collection("commands") // この行を追加
 
     /**
      * 指定されたルームを検索し、存在しない場合は新規作成します。
@@ -130,4 +132,22 @@ class FirebaseService(
         // 例: firestore.collection("commands").document(targetUserId).set(mapOf("command" to controlData)).await()
         return true // 仮
     }
+
+    // --- ここからが追加部分 ---
+    /**
+     * 遠隔操作コマンドを送信します。
+     * @param targetUserId 送信先のユーザーID
+     * @param command 送信する操作コマンド
+     * @return 成功した場合はtrue、失敗した場合はfalse
+     */
+    suspend fun sendControlCommand(targetUserId: String, command: ControlCommand): Boolean {
+        return try {
+            commandsCollection.document(targetUserId).set(command).await()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+    // --- ここまでが追加部分 ---
 }
