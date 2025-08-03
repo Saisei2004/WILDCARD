@@ -46,12 +46,13 @@ fun AppNavigation() {
         }
         // 遠隔操作画面
         composable(
-            // 【変更点】ルートに引数 {targetUserId} を追加
             route = "remote_control_route/{targetUserId}",
             arguments = listOf(navArgument("targetUserId") { type = NavType.StringType })
         ) { backStackEntry ->
-            // val targetUserId = backStackEntry.arguments?.getString("targetUserId")
-            RemoteControlScreen(navController = navController)
+            // ✅ backStackEntryからtargetUserIdを取得します。
+            val targetUserId = backStackEntry.arguments?.getString("targetUserId") ?: ""
+            // ✅ RemoteControlScreenに取得したIDを渡します。
+            RemoteControlScreen(navController = navController, targetUserId = targetUserId)
         }
     }
 }
