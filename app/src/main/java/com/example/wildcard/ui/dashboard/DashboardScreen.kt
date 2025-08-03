@@ -1,13 +1,15 @@
 package com.example.wildcard.ui.dashboard
 
 import android.app.TimePickerDialog
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -31,7 +33,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.wildcard.R
 import com.example.wildcard.data.model.User
 import com.example.wildcard.ui.navigation.AppScreen
 import com.google.firebase.auth.FirebaseAuth
@@ -39,8 +45,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.random.Random
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
-// --- テーマカラーパレット ---
 private val MorningSkyBrush = Brush.verticalGradient(
     colors = listOf(Color(0xFF81D4FA), Color(0xFFB3E5FC), Color(0xFFFFE0B2))
 )
@@ -61,12 +68,123 @@ private val DarkTextColor = Color(0xFF263238)
 @Composable
 fun DashboardScreen(
     navController: NavController,
-    viewModel: DashboardViewModel
+    roomId: String,
+    applicationContext: Context
 ) {
+    val viewModel: DashboardViewModel = viewModel(
+        key = roomId,
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
+                    return DashboardViewModel(roomId, applicationContext) as T
+                }
+                throw IllegalArgumentException("Unknown ViewModel class")
+            }
+        }
+    )
+
     val room by viewModel.room.collectAsState()
     val users by viewModel.users.collectAsState()
     val isMorningPhase by viewModel.isMorningPhase.collectAsState()
     val currentUserStatus by viewModel.currentUserStatus.collectAsState()
+
+    val context = LocalContext.current
+
+    // オーディオマネージャ（アラーム音量バックアップ用）
+    val audioManager = remember {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+    var originalAlarmVolume by remember { mutableStateOf<Int?>(null) }
+
+    // バイブレーション
+    val vibrator = remember {
+        (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
+    }
+    val shouldAlert = isMorningPhase && currentUserStatus != "woke_up"
+
+    // MediaPlayer（alarm.mp3 は res/raw/alarm.mp3 前提）
+    val mediaPlayer = remember {
+        MediaPlayer().apply {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                }
+                val afd = context.resources.openRawResourceFd(R.raw.alarm)
+                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                afd.close()
+                isLooping = true
+                prepare()
+                setVolume(1f, 1f)
+            } catch (_: Exception) {
+                // silent fail
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            if (mediaPlayer.isPlaying) {
+                mediaPlayer.stop()
+            }
+            mediaPlayer.release()
+            originalAlarmVolume?.let {
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, it, 0)
+            }
+        }
+    }
+
+    LaunchedEffect(shouldAlert) {
+        if (shouldAlert) {
+            if (originalAlarmVolume == null) {
+                originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+                audioManager.setStreamVolume(
+                    AudioManager.STREAM_ALARM,
+                    audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                    0
+                )
+            }
+
+            vibrator?.takeIf { it.hasVibrator() }?.let { v ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val effect = VibrationEffect.createWaveform(longArrayOf(0, 500, 500), 0)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val attrs = android.os.VibrationAttributes.Builder()
+                            .setUsage(android.os.VibrationAttributes.USAGE_ALARM)
+                            .build()
+                        v.vibrate(effect, attrs)
+                    } else {
+                        v.vibrate(effect)
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    v.vibrate(longArrayOf(0, 500, 500), 0)
+                }
+            }
+
+            if (!mediaPlayer.isPlaying) {
+                try {
+                    mediaPlayer.start()
+                } catch (_: Exception) {
+                }
+            }
+        } else {
+            vibrator?.cancel()
+            if (mediaPlayer.isPlaying) {
+                mediaPlayer.pause()
+                mediaPlayer.seekTo(0)
+            }
+            originalAlarmVolume?.let {
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, it, 0)
+            }
+            originalAlarmVolume = null
+        }
+    }
 
     Crossfade(targetState = isMorningPhase, animationSpec = tween(1500), label = "PhaseChange") { isMorning ->
         val backgroundBrush = if (isMorning) MorningSkyBrush else NightSkyWithGroundBrush
@@ -90,9 +208,8 @@ fun DashboardScreen(
                         CircularProgressIndicator(color = Color.White)
                     }
                 } else {
-                    // 上部の時刻表示エリア
                     Column(
-                        modifier = Modifier.weight(0.9f), // ★ 変更: 上部の比率を調整
+                        modifier = Modifier.weight(0.9f),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -104,11 +221,10 @@ fun DashboardScreen(
                     }
                 }
 
-                // 下部の参加者リストエリア
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1.1f) // ★ 変更: 下部の比率を調整
+                        .weight(1.1f)
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -187,15 +303,16 @@ private fun NightPhaseContent(viewModel: DashboardViewModel) {
         fontWeight = FontWeight.SemiBold,
         color = Color.White
     )
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
+    // デバッグボタンを追加
     Row(
         modifier = Modifier.fillMaxWidth(0.9f),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         LargeButton(text = "時間変更", onClick = { timePicker.show() }, modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         OutlinedButton(
             onClick = { showResetDialog = true },
             shape = CircleShape,
@@ -207,6 +324,19 @@ private fun NightPhaseContent(viewModel: DashboardViewModel) {
             Icon(Icons.Default.Refresh, contentDescription = "時間をリセット")
         }
     }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // 朝フェーズへ移動（デバッグ）
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        LargeButton(
+            text = "朝フェーズへ移動",
+            onClick = { viewModel.forceMorningPhase() },
+            modifier = Modifier.width(220.dp)
+        )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
 
     if (showResetDialog) {
         AlertDialog(

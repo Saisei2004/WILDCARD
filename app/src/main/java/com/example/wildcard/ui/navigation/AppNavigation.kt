@@ -4,13 +4,9 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.example.wildcard.ui.dashboard.DashboardScreen
-import com.example.wildcard.ui.dashboard.DashboardViewModel
 import com.example.wildcard.ui.mission.MissionScreen
 import com.example.wildcard.ui.remotecontrol.RemoteControlScreen
 import com.example.wildcard.ui.registration.UserRegistrationScreen
@@ -39,45 +35,40 @@ sealed class AppScreen(val route: String) {
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun AppNavigation() {
-    // アニメーション対応のNavControllerを使用します
     val navController = rememberAnimatedNavController()
     val context = LocalContext.current
 
-    // スライドアニメーションの定義
     val slideInRight = slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(500))
     val slideOutLeft = slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(500))
     val slideInLeft = slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(500))
     val slideOutRight = slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(500))
 
-    // NavHostをAnimatedNavHostに置き換えます
     AnimatedNavHost(navController = navController, startDestination = AppScreen.Registration.route) {
 
-        // ユーザー登録/ルーム参加画面
         composable(
             route = AppScreen.Registration.route,
-            exitTransition = { slideOutLeft },      // この画面から去るとき（左へスライドアウト）
-            popEnterTransition = { slideInLeft }   // 他の画面から戻ってくるとき（左からスライドイン）
+            exitTransition = { slideOutLeft },
+            popEnterTransition = { slideInLeft }
         ) {
             UserRegistrationScreen(navController = navController)
         }
 
-        // ダッシュボード画面
         composable(
             route = AppScreen.Dashboard.route,
             arguments = listOf(navArgument("roomId") { type = NavType.StringType }),
-            enterTransition = { slideInRight },     // この画面に入るとき（右からスライドイン）
-            exitTransition = { slideOutLeft },      // この画面から去るとき
-            popEnterTransition = { slideInLeft },   // 他の画面から戻ってくるとき
-            popExitTransition = { slideOutRight }   // この画面から「戻る」操作をしたとき
+            enterTransition = { slideInRight },
+            exitTransition = { slideOutLeft },
+            popEnterTransition = { slideInLeft },
+            popExitTransition = { slideOutRight }
         ) { backStackEntry ->
             val roomId = backStackEntry.arguments?.getString("roomId") ?: return@composable
-            val viewModel: DashboardViewModel = viewModel(
-                factory = DashboardViewModelFactory(roomId, context.applicationContext)
+            DashboardScreen(
+                navController = navController,
+                roomId = roomId,
+                applicationContext = LocalContext.current
             )
-            DashboardScreen(navController = navController, viewModel = viewModel)
         }
 
-        // ミッション画面
         composable(
             route = AppScreen.Mission.route,
             enterTransition = { slideInRight },
@@ -88,7 +79,6 @@ fun AppNavigation() {
             MissionScreen(navController = navController)
         }
 
-        // 遠隔操作画面
         composable(
             route = AppScreen.RemoteControl.route,
             arguments = listOf(navArgument("targetUserId") { type = NavType.StringType }),
@@ -98,19 +88,5 @@ fun AppNavigation() {
             val targetUserId = backStackEntry.arguments?.getString("targetUserId") ?: ""
             RemoteControlScreen(navController = navController, targetUserId = targetUserId)
         }
-    }
-}
-
-// ViewModelに引数を渡すためのFactoryクラス (変更なし)
-class DashboardViewModelFactory(
-    private val roomId: String,
-    private val applicationContext: android.content.Context
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return DashboardViewModel(roomId, applicationContext) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
