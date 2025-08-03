@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.wildcard.data.model.User
 import java.text.SimpleDateFormat
@@ -23,15 +22,13 @@ import java.util.*
 @Composable
 fun DashboardScreen(
     navController: NavController,
-    viewModel: DashboardViewModel = viewModel()
+    viewModel: DashboardViewModel
 ) {
-    // --- ViewModelからリアルタイムのデータを取得 ---
     val room by viewModel.room.collectAsState()
     val users by viewModel.users.collectAsState()
     val countdown by viewModel.countdown.collectAsState()
     val context = LocalContext.current
 
-    // --- 時刻設定ダイアログの準備 ---
     val timePicker = TimePickerDialog(
         context,
         { _, hourOfDay, minute -> viewModel.setWakeupTime(hourOfDay, minute) },
@@ -46,7 +43,6 @@ fun DashboardScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // --- 起床時間表示 ---
         Text("起床時間", style = MaterialTheme.typography.titleMedium)
         val wakeupTimeFormatted = room?.wakeupTime?.let {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
@@ -55,7 +51,6 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // --- 残り時間表示 ---
         Text(countdown, fontSize = 32.sp)
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -66,7 +61,6 @@ fun DashboardScreen(
 
         Divider(modifier = Modifier.padding(vertical = 16.dp))
 
-        // --- 参加者リスト表示 ---
         Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
             items(users) { user ->

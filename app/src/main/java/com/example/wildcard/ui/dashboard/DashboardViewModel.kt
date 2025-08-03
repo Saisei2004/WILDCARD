@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.*
 
-class DashboardViewModel : ViewModel() {
+// コンストラクタでroomIdを受け取るように変更
+class DashboardViewModel(private val roomId: String) : ViewModel() {
 
     private val repository = FirebaseRepository()
 
@@ -29,32 +29,27 @@ class DashboardViewModel : ViewModel() {
     private var countDownTimer: CountDownTimer? = null
 
     init {
+        // 受け取ったroomIdを使って監視を開始
         viewModelScope.launch {
-            // 現在のユーザー情報を取得し、そのユーザーが属するルームの監視を開始する
-            val currentUser = repository.getCurrentUser()
-            currentUser?.roomId?.let { roomId ->
-                repository.listenToRoomUpdates(roomId).collect { roomData ->
-                    _room.value = roomData
-                    // 起床時間が更新されたらカウントダウンを再設定
-                    setupCountdown(roomData.wakeupTime)
-                }
+            repository.listenToRoomUpdates(roomId).collect { roomData ->
+                _room.value = roomData
+                setupCountdown(roomData.wakeupTime)
             }
-            currentUser?.roomId?.let { roomId ->
-                repository.listenToUsersInRoom(roomId).collect { userList ->
-                    _users.value = userList
-                }
+        }
+        viewModelScope.launch {
+            repository.listenToUsersInRoom(roomId).collect { userList ->
+                _users.value = userList
             }
         }
     }
 
     private fun setupCountdown(wakeupTime: Long) {
-        countDownTimer?.cancel() // 既存のタイマーはキャンセル
+        countDownTimer?.cancel()
         val remainingTime = wakeupTime - System.currentTimeMillis()
 
         if (remainingTime > 0) {
             countDownTimer = object : CountDownTimer(remainingTime, 1000) {
                 override fun onTick(millisUntilFinished: Long) {
-                    // HH:mm:ss形式にフォーマット
                     val hours = millisUntilFinished / (1000 * 60 * 60)
                     val minutes = (millisUntilFinished % (1000 * 60 * 60)) / (1000 * 60)
                     val seconds = (millisUntilFinished % (1000 * 60)) / 1000
@@ -77,21 +72,18 @@ class DashboardViewModel : ViewModel() {
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            // もし設定した時刻が現在時刻より前なら、明日の時刻として設定
             if (before(Calendar.getInstance())) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }
         val newTime = calendar.timeInMillis
         viewModelScope.launch {
-            _room.value?.roomCode?.let { roomId ->
-                repository.updateWakeupTime(roomId, newTime)
-            }
+            repository.updateWakeupTime(roomId, newTime)
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        countDownTimer?.cancel() // ViewModelが破棄されるときにタイマーも止める
+        countDownTimer?.cancel()
     }
 }

@@ -42,15 +42,17 @@ fun UserRegistrationScreen(
 
     // --- 2. ViewModelからのイベントを監視 ---
     //    (ルーム参加成功/失敗を待って画面遷移やトースト表示を行う)
+    // UserRegistrationScreen.kt
+
     LaunchedEffect(Unit) {
         homeViewModel.navigationEvent.collect { event ->
             when (event) {
+                // NavigationEventからroomIdを受け取る
                 is HomeViewModel.NavigationEvent.NavigateToDashboard -> {
-                    // 成功したらダッシュボードへ
-                    navController.navigate("dashboard_route")
+                    // dashboard_route/{roomId} の形で遷移する
+                    navController.navigate("dashboard_route/${event.roomId}") // ← ここを変更
                 }
                 is HomeViewModel.NavigationEvent.ShowError -> {
-                    // 失敗したらエラーメッセージを表示
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
             }
