@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import com.example.wildcard.data.model.User
 import java.text.SimpleDateFormat
@@ -30,6 +32,7 @@ fun DashboardScreen(
     val countdown by viewModel.countdown.collectAsState()
     val context = LocalContext.current
 
+    // TimePickerのロジックは変更なし
     val timePicker = TimePickerDialog(
         context,
         { _, hourOfDay, minute -> viewModel.setWakeupTime(hourOfDay, minute) },
@@ -38,63 +41,111 @@ fun DashboardScreen(
         true
     )
 
-    Column(
+    // 【変更点】レイアウトの親をConstraintLayoutに変更
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 40.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 16.dp) // 左右のパディングのみ設定
     ) {
-        // ... (起床時間、残り時間、設定ボタンは変更なし) ...
-        Text("起床時間", style = MaterialTheme.typography.titleMedium)
+        // 配置する要素の参照を作成
+        val (titleRef, timeRef, countdownRef, buttonRef, listRef) = createRefs()
+
+        // 画面内の特定の位置を示す「ガイドライン」を作成
+        val guideline20 = createGuidelineFromTop(0.2f) // 上から20%
+        val guideline30 = createGuidelineFromTop(0.3f) // 上から30%
+        val guideline40 = createGuidelineFromTop(0.4f) // 上から40%
+        val guideline50 = createGuidelineFromTop(0.5f) // 上から50% (中央)
+
+        // 「起床時間」ラベルを20%ラインに配置
+        Text(
+            text = "起床時間",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.constrainAs(titleRef) {
+                centerHorizontallyTo(parent)
+                bottom.linkTo(guideline20)
+            }
+        )
+
+        // 起床時間（00:00）をラベルの下に配置
         val wakeupTimeFormatted = room?.wakeupTime?.let {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
         } ?: "未設定"
-        Text(wakeupTimeFormatted, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = wakeupTimeFormatted,
+            fontSize = 60.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.constrainAs(timeRef) {
+                centerHorizontallyTo(parent)
+                top.linkTo(titleRef.bottom)
+            }
+        )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        // カウントダウン表示を30%ラインに配置
+        Text(
+            text = countdown,
+            fontSize = 32.sp,
+            modifier = Modifier.constrainAs(countdownRef) {
+                centerHorizontallyTo(parent)
+                top.linkTo(guideline30)
+                bottom.linkTo(guideline30)
+            }
+        )
 
-        Text(countdown, fontSize = 32.sp)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = { timePicker.show() }) {
+        // 設定ボタンを40%ラインに配置
+        Button(
+            onClick = { timePicker.show() },
+            modifier = Modifier.constrainAs(buttonRef) {
+                centerHorizontallyTo(parent)
+                top.linkTo(guideline40)
+                bottom.linkTo(guideline40)
+            }
+        ) {
             Text("起床時間を設定する")
         }
 
-        Divider(modifier = Modifier.padding(vertical = 16.dp))
-
-        // --- 参加者リスト表示 ---
-        Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(users) { user ->
-                // 現在時刻が起床時間を過ぎているか
-                val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
-
-                UserListItem(
-                    user = user,
-                    // 【変更点】クリック可能かどうかの判定を追加
-                    isClickable = isPunishmentTime && user.status != "woke_up",
-                    // 【変更点】クリックされた際の動作を定義
-                    onUserClick = { selectedUser ->
-                        navController.navigate("remote_control_route/${selectedUser.uid}")
-                    }
-                )
+        // 参加者リストエリアを画面下半分に配置
+        Column(
+            modifier = Modifier.constrainAs(listRef) {
+                top.linkTo(guideline50) // 50%ラインから開始
+                bottom.linkTo(parent.bottom) // 画面下部まで
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+                width = Dimension.fillToConstraints // 幅を親に合わせる
+                height = Dimension.fillToConstraints // 高さを制約に合わせて埋める
+            },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Divider()
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("参加者リスト", style = MaterialTheme.typography.titleMedium)
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(users) { user ->
+                    val isPunishmentTime = (room?.wakeupTime ?: 0) < System.currentTimeMillis()
+                    UserListItem(
+                        user = user,
+                        isClickable = isPunishmentTime && user.status != "woke_up",
+                        onUserClick = { selectedUser ->
+                            navController.navigate("remote_control_route/${selectedUser.uid}")
+                        }
+                    )
+                }
             }
         }
     }
 }
 
+// UserListItem関数は変更なし
 @Composable
 fun UserListItem(
     user: User,
-    isClickable: Boolean, // クリック可能かどうかのフラグを受け取る
-    onUserClick: (User) -> Unit // クリック時のコールバック関数を受け取る
+    isClickable: Boolean,
+    onUserClick: (User) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = isClickable) { // isClickableがtrueの時のみクリック可能
-                onUserClick(user) // クリックされたら、渡された関数を実行
+            .clickable(enabled = isClickable) {
+                onUserClick(user)
             }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -108,7 +159,6 @@ fun UserListItem(
                 else -> ""
             },
             color = when {
-                // 【変更点】クリック可能なユーザー（お仕置き対象）は色を変えて分かりやすくする
                 isClickable -> MaterialTheme.colorScheme.error
                 user.status == "woke_up" -> MaterialTheme.colorScheme.primary
                 else -> LocalContentColor.current
