@@ -73,7 +73,16 @@ class RemoteControlViewModel(
         soundActive = active
         sendControlCommand()
     }
-
+    /**
+     * 現在の移動方向と引数の方向が一致する場合に停止コマンドを送信します。
+     * (例：「前進」ボタンを離した時に、現在の移動方向が「前進」であれば停止する)
+     */
+    fun stopMovingIfNecessary(releasedDirection: String) {
+        if (moveDirection == releasedDirection) {
+            moveDirection = "stop"
+            sendControlCommand()
+        }
+    }
     /**
      * 現在の状態に基づいてコントロールコマンドを送信します
      */
