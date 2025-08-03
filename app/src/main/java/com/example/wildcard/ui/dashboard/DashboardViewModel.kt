@@ -24,8 +24,6 @@ class DashboardViewModel(
 
     private val firebaseService = FirebaseService(FirebaseFirestore.getInstance())
     private val firebaseAuth = FirebaseAuth.getInstance()
-
-    // WebRTC関連
     private val callManager = applicationContext?.let { CallManager(it) }
 
     private val _room = MutableStateFlow<Room?>(null)
@@ -34,11 +32,12 @@ class DashboardViewModel(
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
-    private val _countdown = MutableStateFlow("00:00:00")
-    val countdown: StateFlow<String> = _countdown.asStateFlow()
+    private val _countdownHoursMinutes = MutableStateFlow("00:00")
+    val countdownHoursMinutes: StateFlow<String> = _countdownHoursMinutes.asStateFlow()
 
-    private val _showMissionButton = MutableStateFlow(false)
-    val showMissionButton: StateFlow<Boolean> = _showMissionButton.asStateFlow()
+    // 「朝フェーズ」かどうかを判定するStateFlow
+    private val _isMorningPhase = MutableStateFlow(false)
+    val isMorningPhase: StateFlow<Boolean> = _isMorningPhase.asStateFlow()
 
     val currentUserStatus: StateFlow<String> = users.map { userList ->
         userList.find { it.uid == firebaseAuth.currentUser?.uid }?.status ?: ""
@@ -52,9 +51,6 @@ class DashboardViewModel(
     private var previousCommand = ControlCommand()
 
     init {
-        // ✅ Checkpoint 1: ViewModelが初期化されたか
-        Log.d("EV3_DEBUG", "DashboardViewModel initialized for roomId: $roomId")
-
         viewModelScope.launch {
             firebaseService.listenToRoomUpdates(roomId).collect { roomData ->
                 _room.value = roomData
@@ -67,10 +63,8 @@ class DashboardViewModel(
             }
         }
         listenToEv3Commands()
-        
-        // 起床時間になったら自動的に配信を開始
         viewModelScope.launch {
-            showMissionButton.collect { shouldStartPublishing ->
+            isMorningPhase.collect { shouldStartPublishing ->
                 if (shouldStartPublishing && !_isPublishing.value) {
                     startPublishing()
                 }
@@ -79,20 +73,9 @@ class DashboardViewModel(
     }
 
     private fun listenToEv3Commands() {
-        val userId = firebaseAuth.currentUser?.uid
-        // ✅ Checkpoint 2: コマンド監視を開始しようとしているか
-        Log.d("EV3_DEBUG", "Attempting to listen for commands for userId: $userId")
-
-        if (userId == null) {
-            Log.e("EV3_DEBUG", "Cannot listen for commands because user is not logged in.")
-            return
-        }
-
+        val userId = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
             firebaseService.listenToCommands(userId).collect { newCommand ->
-                // ✅ Checkpoint 3: Firebaseから新しいコマンドを受信したか
-                Log.d("EV3_DEBUG", "New command received from Firebase: $newCommand")
-
                 if (newCommand.direction != previousCommand.direction) {
                     val endpoint = when (newCommand.direction) {
                         "forward", "backward", "left", "right" -> "/${newCommand.direction}"
@@ -121,26 +104,31 @@ class DashboardViewModel(
 
     private fun setupCountdown(wakeupTime: Long) {
         countDownTimer?.cancel()
-        val remainingTime = wakeupTime - System.currentTimeMillis()
+        val currentTime = System.currentTimeMillis()
+        val remainingTime = wakeupTime - currentTime
+        val oneHourInMillis = 3600 * 1000
+
+        // 朝フェーズの判定ロジック
+        _isMorningPhase.value = wakeupTime > 0 && currentTime >= wakeupTime && currentTime < (wakeupTime + oneHourInMillis)
 
         if (remainingTime > 0) {
-            _showMissionButton.value = false
             countDownTimer = object : CountDownTimer(remainingTime, 1000) {
                 override fun onTick(millisUntilFinished: Long) {
                     val hours = millisUntilFinished / (1000 * 60 * 60)
                     val minutes = (millisUntilFinished % (1000 * 60 * 60)) / (1000 * 60)
-                    val seconds = (millisUntilFinished % (1000 * 60)) / 1000
-                    _countdown.value = String.format("%02d:%02d:%02d", hours, minutes, seconds)
+                    _countdownHoursMinutes.value = String.format("%02d:%02d", hours, minutes)
+
+                    val now = System.currentTimeMillis()
+                    _isMorningPhase.value = wakeupTime > 0 && now >= wakeupTime && now < (wakeupTime + oneHourInMillis)
                 }
 
                 override fun onFinish() {
-                    _countdown.value = "時間です！"
-                    _showMissionButton.value = true
+                    _countdownHoursMinutes.value = "00:00"
+                    _isMorningPhase.value = true
                 }
             }.start()
         } else {
-            _countdown.value = "設定時間超過"
-            _showMissionButton.value = true
+            _countdownHoursMinutes.value = "00:00"
         }
     }
 
@@ -160,34 +148,33 @@ class DashboardViewModel(
         }
     }
 
+    // 時間をリセットする関数
+    fun resetWakeupTime() {
+        viewModelScope.launch {
+            firebaseService.updateWakeupTime(roomId, 0L)
+        }
+    }
+
     fun onWakeUpClicked() {
         val userId = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
             firebaseService.updateUserStatus(userId, "woke_up")
-            // 起床したら配信を停止
             stopPublishing()
         }
     }
 
-    /**
-     * WebRTCでの映像配信（映像のみ）を開始します
-     */
     private fun startPublishing() {
         val userId = firebaseAuth.currentUser?.uid ?: return
         if (callManager == null) {
             Log.e("Dashboard", "CallManager is null - cannot start publishing")
             return
         }
-
         viewModelScope.launch {
             try {
                 val roomName = "control_$userId"
                 val success = callManager.startPublishing(roomName)
                 if (success) {
                     _isPublishing.value = true
-                    Log.d("Dashboard", "Started publishing to room: $roomName")
-                } else {
-                    Log.e("Dashboard", "Failed to start publishing")
                 }
             } catch (e: Exception) {
                 Log.e("Dashboard", "Exception while starting publishing", e)
@@ -195,15 +182,11 @@ class DashboardViewModel(
         }
     }
 
-    /**
-     * WebRTCでの映像配信（映像のみ）を停止します
-     */
     private fun stopPublishing() {
         viewModelScope.launch {
             try {
                 callManager?.endCall()
                 _isPublishing.value = false
-                Log.d("Dashboard", "Stopped publishing")
             } catch (e: Exception) {
                 Log.e("Dashboard", "Exception while stopping publishing", e)
             }
