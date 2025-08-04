@@ -299,7 +299,7 @@ Hackit 2025で3日間という短期間で完成させたこのプロジェク�
 ### **詳細技術仕様**
 技術スタック、アーキテクチャ、API仕様、セットアップ方法などの詳細情報は、以下のシステム仕様書をご参照ください。
 
-� **[Sleep Buster システム仕様書](https://github.com/Saisei2004/WILDCARD/blob/main/SystemSpecification.md)**
+� **[Sleep Buster システム仕様書](https://github.com/Saisei2004/WILDCARD/blob/main/docs/SystemSpecification.md)**
 
 ### **主要章構成**
 - **第1章**: システム概要
