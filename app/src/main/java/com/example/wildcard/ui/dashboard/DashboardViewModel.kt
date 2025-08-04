@@ -36,9 +36,9 @@ class DashboardViewModel(
 
     // 通常の朝フェーズ判定（時間ベース）
     private val _computedMorningPhase = MutableStateFlow(false)
-    // 強制的に朝フェーズにするオーバーライド（デバッグ用）
+    // ローカル強制オーバーライド（端末単体のデバッグ用）
     private val _forcedMorning = MutableStateFlow(false)
-    // 実際に使う朝フェーズ（通常 OR 強制）
+    // 実際に使う朝フェーズ（通常またはローカル強制）
     val isMorningPhase: StateFlow<Boolean> = combine(
         _computedMorningPhase,
         _forcedMorning
@@ -167,9 +167,17 @@ class DashboardViewModel(
         }
     }
 
-    /** デバッグ用：強制的に朝フェーズに移す */
+    /** ローカルだけ強制的に朝フェーズにする（既存のデバッグ） */
     fun forceMorningPhase() {
         _forcedMorning.value = true
+    }
+
+    /** ルーム全体を朝フェーズにする（グローバル）：wakeupTime を今に書き込む */
+    fun triggerGlobalMorningPhase() {
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            firebaseService.updateWakeupTime(roomId, now)
+        }
     }
 
     private fun startPublishing() {
