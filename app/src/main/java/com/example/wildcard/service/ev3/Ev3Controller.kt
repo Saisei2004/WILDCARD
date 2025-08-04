@@ -5,7 +5,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
-class Ev3Controller(private val serverIp: String = "172.18.28.64") {
+class Ev3Controller(private val serverIp: String = "172.18.28.79") {
 
     private val serverUrl = "http://$serverIp:5000"
 

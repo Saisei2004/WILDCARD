@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,23 +31,19 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.ntt.skyway.core.content.sink.SurfaceViewRenderer
 
-// --- 新しいカラーパレット (深緑テーマ) ---
 private val MorningSkyBrush = Brush.verticalGradient(
     colors = listOf(Color(0xFF81D4FA), Color(0xFFB3E5FC), Color(0xFFFFE0B2))
 )
 private val ButtonBrush = Brush.radialGradient(
-    colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20)), // 深緑のグラデーション
+    colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20)),
     radius = 200f
 )
 private val ButtonTextColor = Color.White
-private val AccentColor = Color(0xFF2E7D32) // 深緑
+private val AccentColor = Color(0xFF2E7D32)
 private val DarkTextColor = Color(0xFF263238)
 
 /**
- * 遠隔操作画面 (新UIデザイン v2.2)
- *
- * 深緑と朝焼けをテーマにした、高級感のあるゲームUIデザイン。
- * 片手操作を意識して、よりコンパクトなレイアウトに調整。
+ * 遠隔操作画面（操作パネルの D-pad とアクションのバランス調整済み）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,9 +94,9 @@ fun RemoteControlScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Top
         ) {
-            // カメラ映像表示エリア
+            // カメラ映像
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -129,55 +124,38 @@ fun RemoteControlScreen(
                     )
                 } else {
                     CircularProgressIndicator(color = AccentColor)
-                    Text("Connecting...", color = Color.White, modifier = Modifier.padding(top = 80.dp))
+                    Text("Connecting.", color = Color.White, modifier = Modifier.padding(top = 80.dp))
                 }
             }
 
-            // 操作パネル
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // 操作パネル（サイズバランス調整済み）
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 DpadController(
                     onDirectionChange = viewModel::updateMoveDirection,
-                    onRelease = viewModel::stopMovingIfNecessary
+                    onRelease = viewModel::stopMovingIfNecessary,
+                    baseSize = 180.dp,          // 少し控えめに
+                    innerButtonSize = 64.dp     // ボタンもバランスを下げた
                 )
                 ActionController(
                     onPunishment = viewModel::updatePunishmentActive,
-                    onSoundToggle = viewModel::updateSoundActive
+                    onSoundToggle = viewModel::updateSoundActive,
+                    punishmentButtonSize = 100.dp // D-padとの比を揃えるため少し縮めたが存在感は維持
                 )
             }
 
-            // 操作終了ボタン
-            Button(
-                onClick = {
-                    viewModel.endControl()
-                    navController.popBackStack()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-                    .shadow(elevation = 8.dp, shape = CircleShape),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-            ) {
-                Text(
-                    "操作終了",
-                    modifier = Modifier.padding(vertical = 12.dp),
-                    color = DarkTextColor,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
 
-/**
- * 押下・解放を検知する共通ボタン
- */
 @Composable
 private fun PressAndHoldButton(
     onPress: () -> Unit,
@@ -218,7 +196,7 @@ private fun PressAndHoldButton(
         contentAlignment = Alignment.Center
     ) {
         Button(
-            onClick = { /* 長押し処理はLaunchedEffectが担当 */ },
+            onClick = { /* 長押しでのみ動く */ },
             modifier = Modifier.fillMaxSize(),
             shape = shape,
             colors = ButtonDefaults.buttonColors(
@@ -233,14 +211,13 @@ private fun PressAndHoldButton(
     }
 }
 
-/**
- * 十字キーコントローラー
- */
 @Composable
-private fun DpadController(onDirectionChange: (String) -> Unit, onRelease: (String) -> Unit) {
-    val baseSize = 160.dp
-    val buttonSize = 56.dp
-
+private fun DpadController(
+    onDirectionChange: (String) -> Unit,
+    onRelease: (String) -> Unit,
+    baseSize: androidx.compose.ui.unit.Dp = 160.dp,
+    innerButtonSize: androidx.compose.ui.unit.Dp = 56.dp
+) {
     Box(
         modifier = Modifier
             .size(baseSize)
@@ -255,7 +232,7 @@ private fun DpadController(onDirectionChange: (String) -> Unit, onRelease: (Stri
             onRelease = { onRelease("forward") },
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .size(buttonSize),
+                .size(innerButtonSize),
             shape = buttonShape
         ) { isPressed ->
             IconWithShadow(icon = Icons.Default.ArrowUpward, isPressed = isPressed)
@@ -265,7 +242,7 @@ private fun DpadController(onDirectionChange: (String) -> Unit, onRelease: (Stri
             onRelease = { onRelease("left") },
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .size(buttonSize),
+                .size(innerButtonSize),
             shape = buttonShape
         ) { isPressed ->
             IconWithShadow(icon = Icons.Default.ArrowBack, isPressed = isPressed)
@@ -275,7 +252,7 @@ private fun DpadController(onDirectionChange: (String) -> Unit, onRelease: (Stri
             onRelease = { onRelease("right") },
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .size(buttonSize),
+                .size(innerButtonSize),
             shape = buttonShape
         ) { isPressed ->
             IconWithShadow(icon = Icons.Default.ArrowForward, isPressed = isPressed)
@@ -285,7 +262,7 @@ private fun DpadController(onDirectionChange: (String) -> Unit, onRelease: (Stri
             onRelease = { onRelease("backward") },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .size(buttonSize),
+                .size(innerButtonSize),
             shape = buttonShape
         ) { isPressed ->
             IconWithShadow(icon = Icons.Default.ArrowDownward, isPressed = isPressed)
@@ -293,27 +270,25 @@ private fun DpadController(onDirectionChange: (String) -> Unit, onRelease: (Stri
     }
 }
 
-/**
- * アクションボタン（お仕置き、音）のコントローラー
- */
 @Composable
 private fun ActionController(
     onPunishment: (Boolean) -> Unit,
-    onSoundToggle: (Boolean) -> Unit
+    onSoundToggle: (Boolean) -> Unit,
+    punishmentButtonSize: androidx.compose.ui.unit.Dp = 88.dp
 ) {
     var soundEnabled by remember { mutableStateOf(false) }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         PressAndHoldButton(
             onPress = { onPunishment(true) },
             onRelease = { onPunishment(false) },
-            modifier = Modifier.size(88.dp),
+            modifier = Modifier.size(punishmentButtonSize),
             shape = CircleShape
         ) { isPressed ->
-            IconWithShadow(icon = Icons.Default.Bolt, isPressed = isPressed, size = 36.dp, text = "お仕置き")
+            IconWithShadow(icon = Icons.Default.Bolt, isPressed = isPressed, size = 32.dp, text = "お仕置き")
         }
 
         Switch(
@@ -326,12 +301,12 @@ private fun ActionController(
                 Icon(
                     if (soundEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
                     contentDescription = null,
-                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                    modifier = Modifier.size(SwitchDefaults.IconSize)
                 )
             },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = AccentColor, // 深緑に合わせる
+                checkedTrackColor = AccentColor,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = Color.White.copy(alpha = 0.5f),
                 checkedIconColor = AccentColor,
@@ -341,9 +316,6 @@ private fun ActionController(
     }
 }
 
-/**
- * 押下時に影がつくアイコン
- */
 @Composable
 private fun IconWithShadow(icon: ImageVector, isPressed: Boolean, size: androidx.compose.ui.unit.Dp = 24.dp, text: String? = null) {
     val elevation by animateDpAsState(if (isPressed) 2.dp else 8.dp, label = "elevation")
@@ -366,7 +338,6 @@ private fun IconWithShadow(icon: ImageVector, isPressed: Boolean, size: androidx
     }
 }
 
-// ViewModelFactory (変更なし)
 class RemoteControlViewModelFactory(
     private val targetUserId: String,
     private val applicationContext: Context
@@ -377,14 +348,5 @@ class RemoteControlViewModelFactory(
             return RemoteControlViewModel(targetUserId, applicationContext) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
-
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewRemoteControlScreen() {
-    MaterialTheme {
-        RemoteControlScreen(rememberNavController(), "dummyUserId")
     }
 }
