@@ -23,16 +23,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.*
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -41,12 +45,18 @@ import com.example.wildcard.R
 import com.example.wildcard.data.model.User
 import com.example.wildcard.ui.navigation.AppScreen
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.random.Random
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+
+// 色定義（既存のメイン／サブカラーを変えず）
+private val WakeupGreen = Color(0xFF2E7D32)
+private val NotWakeupRed = Color(0xFFFF0000)
+private val NeutralGray = Color(0xFF757575)
+private val DarkTextColor = Color(0xFF263238)
+private val ButtonTextColor = Color.White
 
 private val MorningSkyBrush = Brush.verticalGradient(
     colors = listOf(Color(0xFF81D4FA), Color(0xFFB3E5FC), Color(0xFFFFE0B2))
@@ -62,8 +72,11 @@ private val ButtonBrush = Brush.radialGradient(
     colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20)),
     radius = 400f
 )
-private val ButtonTextColor = Color.White
-private val DarkTextColor = Color(0xFF263238)
+
+// カスタム日本語フォント（Mochiy Pop P One）を使う（res/font/mochiy_pop_p_one.ttf を配置済み）
+private val GreetingFontFamily = FontFamily(
+    Font(R.font.mochiy_pop_p_one, FontWeight.Normal)
+)
 
 @Composable
 fun DashboardScreen(
@@ -89,22 +102,32 @@ fun DashboardScreen(
     val isMorningPhase by viewModel.isMorningPhase.collectAsState()
     val currentUserStatus by viewModel.currentUserStatus.collectAsState()
 
+    var showActivateBuster by remember { mutableStateOf(false) }
+    LaunchedEffect(isMorningPhase) {
+        if (isMorningPhase) {
+            showActivateBuster = false
+            delay(5000)
+            showActivateBuster = true
+        } else {
+            showActivateBuster = false
+        }
+    }
+
     val context = LocalContext.current
 
-    // オーディオマネージャ（アラーム音量バックアップ用）
     val audioManager = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
     var originalAlarmVolume by remember { mutableStateOf<Int?>(null) }
 
-    // バイブレーション
     val vibrator = remember {
         (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
     }
     val shouldAlert = isMorningPhase && currentUserStatus != "woke_up"
 
-    // MediaPlayer（alarm.mp3 は res/raw/alarm.mp3 前提）
-    val mediaPlayer = remember {
+    var alarmVolumeFraction by rememberSaveable { mutableStateOf(1f) }
+
+    val mediaPlayerAlarm = remember {
         MediaPlayer().apply {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -120,19 +143,27 @@ fun DashboardScreen(
                 afd.close()
                 isLooping = true
                 prepare()
-                setVolume(1f, 1f)
+                setVolume(alarmVolumeFraction, alarmVolumeFraction)
             } catch (_: Exception) {
-                // silent fail
             }
+        }
+    }
+
+    LaunchedEffect(alarmVolumeFraction) {
+        mediaPlayerAlarm.setVolume(alarmVolumeFraction, alarmVolumeFraction)
+        if (shouldAlert) {
+            if (originalAlarmVolume == null) {
+                originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+            }
+            val target = (audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM) * alarmVolumeFraction).toInt()
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
         }
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            if (mediaPlayer.isPlaying) {
-                mediaPlayer.stop()
-            }
-            mediaPlayer.release()
+            if (mediaPlayerAlarm.isPlaying) mediaPlayerAlarm.stop()
+            mediaPlayerAlarm.release()
             originalAlarmVolume?.let {
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, it, 0)
             }
@@ -143,12 +174,9 @@ fun DashboardScreen(
         if (shouldAlert) {
             if (originalAlarmVolume == null) {
                 originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
-                audioManager.setStreamVolume(
-                    AudioManager.STREAM_ALARM,
-                    audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
-                    0
-                )
             }
+            val target = (audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM) * alarmVolumeFraction).toInt()
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
 
             vibrator?.takeIf { it.hasVibrator() }?.let { v ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -167,17 +195,17 @@ fun DashboardScreen(
                 }
             }
 
-            if (!mediaPlayer.isPlaying) {
+            if (!mediaPlayerAlarm.isPlaying) {
                 try {
-                    mediaPlayer.start()
+                    mediaPlayerAlarm.start()
                 } catch (_: Exception) {
                 }
             }
         } else {
             vibrator?.cancel()
-            if (mediaPlayer.isPlaying) {
-                mediaPlayer.pause()
-                mediaPlayer.seekTo(0)
+            if (mediaPlayerAlarm.isPlaying) {
+                mediaPlayerAlarm.pause()
+                mediaPlayerAlarm.seekTo(0)
             }
             originalAlarmVolume?.let {
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, it, 0)
@@ -215,6 +243,28 @@ fun DashboardScreen(
                     ) {
                         if (isMorning) {
                             MorningPhaseContent(viewModel = viewModel, currentUserStatus = currentUserStatus)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (currentUserStatus != "woke_up") {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.9f)
+                                        .padding(vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        "アラーム音量: ${(alarmVolumeFraction * 100).toInt()}%",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = DarkTextColor
+                                    )
+                                    Slider(
+                                        value = alarmVolumeFraction,
+                                        onValueChange = { alarmVolumeFraction = it.coerceIn(0f, 1f) },
+                                        valueRange = 0f..1f,
+                                        steps = 9,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
                         } else {
                             NightPhaseContent(viewModel = viewModel)
                         }
@@ -249,8 +299,10 @@ fun DashboardScreen(
                                 val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
                                 UserListItem(
                                     user = user,
+                                    isMorningPhase = isMorningPhase,
+                                    showActivateBuster = showActivateBuster,
                                     isPunishmentTime = isPunishmentTime,
-                                    isClickable = isPunishmentTime && user.status != "woke_up" && user.uid != currentUserId,
+                                    isSelf = user.uid == currentUserId,
                                     onUserClick = { selectedUser ->
                                         navController.navigate(AppScreen.RemoteControl.createRoute(selectedUser.uid))
                                     }
@@ -286,7 +338,7 @@ private fun NightPhaseContent(viewModel: DashboardViewModel) {
     )
 
     val wakeupTimeFormatted = room?.wakeupTime?.takeIf { it > 0 }?.let {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+        SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(Date(it))
     } ?: "--:--"
     Text(
         text = wakeupTimeFormatted,
@@ -305,7 +357,6 @@ private fun NightPhaseContent(viewModel: DashboardViewModel) {
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    // デバッグボタンを追加
     Row(
         modifier = Modifier.fillMaxWidth(0.9f),
         horizontalArrangement = Arrangement.Center,
@@ -327,11 +378,10 @@ private fun NightPhaseContent(viewModel: DashboardViewModel) {
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // 朝フェーズへ移動（デバッグ）
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         LargeButton(
             text = "朝フェーズへ移動",
-            onClick = { viewModel.forceMorningPhase() },
+            onClick = { viewModel.triggerGlobalMorningPhase() },
             modifier = Modifier.width(220.dp)
         )
     }
@@ -359,40 +409,230 @@ private fun NightPhaseContent(viewModel: DashboardViewModel) {
 @Composable
 private fun MorningPhaseContent(viewModel: DashboardViewModel, currentUserStatus: String) {
     val room by viewModel.room.collectAsState()
+    val context = LocalContext.current
 
-    Text(
-        text = "起床予定時間",
-        fontSize = 24.sp,
-        fontWeight = FontWeight.Bold,
-        color = DarkTextColor
+    var prevStatus by remember { mutableStateOf(currentUserStatus) }
+    var greetingTriggered by remember { mutableStateOf(false) }
+    LaunchedEffect(currentUserStatus) {
+        if (prevStatus != "woke_up" && currentUserStatus == "woke_up") {
+            greetingTriggered = true
+        }
+        prevStatus = currentUserStatus
+    }
+
+    // morning.mp3 再生準備
+    val mediaPlayerMorning = remember {
+        MediaPlayer().apply {
+            try {
+                val afd = context.resources.openRawResourceFd(R.raw.morning)
+                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                afd.close()
+                isLooping = false
+                prepare()
+            } catch (_: Exception) {
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (mediaPlayerMorning.isPlaying) mediaPlayerMorning.stop()
+            mediaPlayerMorning.release()
+        }
+    }
+
+    // アニメーション用
+    val scaleAnim = remember { Animatable(0.5f) }
+    val bounceTransition = rememberInfiniteTransition()
+    val bounceOffset by bounceTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    val shimmerTransition = rememberInfiniteTransition()
+    val shimmer by shimmerTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
     )
 
-    val wakeupTimeFormatted = room?.wakeupTime?.takeIf { it > 0 }?.let {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
-    } ?: "--:--"
-    Text(
-        text = wakeupTimeFormatted,
-        fontSize = 90.sp,
-        fontWeight = FontWeight.Bold,
-        color = DarkTextColor
-    )
+    // 起床後一度だけ：1秒遅延して音とズーム→バウンス
+    LaunchedEffect(greetingTriggered) {
+        if (greetingTriggered) {
+            delay(1000)
+            try {
+                mediaPlayerMorning.start()
+            } catch (_: Exception) {
+            }
+            scaleAnim.animateTo(1.1f, animationSpec = tween(durationMillis = 500))
+            scaleAnim.animateTo(
+                1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
+        }
+    }
 
-    Spacer(modifier = Modifier.height(24.dp))
+    if (currentUserStatus == "woke_up") {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(modifier = Modifier.height(8.dp))
 
-    Box(modifier = Modifier.height(84.dp), contentAlignment = Alignment.Center) {
-        if (currentUserStatus == "woke_up") {
+            // 起床時間を上に出す
             Text(
-                text = "おはようございます！",
+                text = "起床予定時間",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = DarkTextColor
             )
-        } else {
+            val wakeupTimeFormatted = room?.wakeupTime?.takeIf { it > 0 }?.let {
+                SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(Date(it))
+            } ?: "--:--"
+            Text(
+                text = wakeupTimeFormatted,
+                fontSize = 90.sp,
+                fontWeight = FontWeight.Bold,
+                color = DarkTextColor
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 挨拶アニメーション
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .height(140.dp)
+                    .fillMaxWidth()
+            ) {
+                FitGreetingText(
+                    text = "おはようございます！",
+                    minFontSize = 28.sp,
+                    maxFontSize = 48.sp,
+                    fontFamily = GreetingFontFamily,
+                    scale = scaleAnim.value,
+                    bounceOffsetDp = bounceOffset.dp,
+                    shimmer = shimmer
+                )
+            }
+        }
+    } else {
+        Text(
+            text = "起床予定時間",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = DarkTextColor
+        )
+
+        val wakeupTimeFormatted = room?.wakeupTime?.takeIf { it > 0 }?.let {
+            SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(Date(it))
+        } ?: "--:--"
+        Text(
+            text = wakeupTimeFormatted,
+            fontSize = 90.sp,
+            fontWeight = FontWeight.Bold,
+            color = DarkTextColor
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Box(modifier = Modifier.height(84.dp), contentAlignment = Alignment.Center) {
             LargeButton(
                 text = "起きた！",
                 onClick = { viewModel.onWakeUpClicked() },
                 modifier = Modifier.width(200.dp)
             )
+        }
+    }
+}
+
+
+@Composable
+private fun FitGreetingText(
+    text: String,
+    minFontSize: TextUnit,
+    maxFontSize: TextUnit,
+    fontFamily: FontFamily,
+    scale: Float,
+    bounceOffsetDp: Dp,
+    shimmer: Float
+) {
+    BoxWithConstraints(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        val textMeasurer = rememberTextMeasurer()
+        val maxWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+
+        var fittedFontSize by remember(text, maxWidth) { mutableStateOf(maxFontSize) }
+        LaunchedEffect(text, maxWidth) {
+            var candidate = maxFontSize.value
+            val min = minFontSize.value
+            var foundSize: TextUnit? = null
+            while (candidate >= min) {
+                val style = TextStyle(
+                    fontSize = candidate.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = fontFamily
+                )
+                val layoutResult = textMeasurer.measure(
+                    text = text,
+                    style = style,
+                    maxLines = 1
+                )
+                if (layoutResult.size.width.toFloat() <= maxWidthPx) {
+                    foundSize = candidate.sp
+                    break
+                }
+                candidate -= 1f
+            }
+            fittedFontSize = foundSize ?: minFontSize
+        }
+
+        Box {
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                style = TextStyle(
+                    fontSize = fittedFontSize,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = fontFamily,
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.25f),
+                        offset = Offset(2f, 2f),
+                        blurRadius = 8f
+                    ),
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(WakeupGreen, WakeupGreen.copy(alpha = 0.85f))
+                    )
+                ),
+                modifier = Modifier
+                    .scale(scale)
+                    .offset(y = bounceOffsetDp)
+            )
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val width = size.width
+                val highlightWidth = width * 0.25f
+                val x = (shimmer * (width + highlightWidth)) - highlightWidth
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.0f),
+                            Color.White.copy(alpha = 0.08f),
+                            Color.White.copy(alpha = 0.0f)
+                        )
+                    ),
+                    topLeft = Offset(x, size.height * 0.25f),
+                    size = androidx.compose.ui.geometry.Size(highlightWidth, size.height * 0.5f),
+                    blendMode = BlendMode.SrcOver
+                )
+            }
         }
     }
 }
@@ -426,16 +666,19 @@ private fun LargeButton(text: String, onClick: () -> Unit, modifier: Modifier = 
 @Composable
 fun UserListItem(
     user: User,
+    isMorningPhase: Boolean,
+    showActivateBuster: Boolean,
     isPunishmentTime: Boolean,
-    isClickable: Boolean,
+    isSelf: Boolean,
     onUserClick: (User) -> Unit
 ) {
+    val showActivateButton = isMorningPhase && showActivateBuster && user.status != "woke_up" && !isSelf
+    val rowClickable = !showActivateButton && !isSelf && user.status != "woke_up"
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = isClickable) {
-                onUserClick(user)
-            }
+            .then(if (rowClickable) Modifier.clickable { onUserClick(user) } else Modifier)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -446,22 +689,79 @@ fun UserListItem(
             fontSize = 18.sp,
             color = DarkTextColor
         )
-        val statusText = when {
-            user.status == "woke_up" -> "起床"
-            isPunishmentTime -> "未起床"
-            else -> "待機中"
+
+        if (showActivateButton) {
+            var showAnimated by remember { mutableStateOf(false) }
+            val offsetX by animateDpAsState(
+                targetValue = if (showAnimated) 0.dp else 16.dp,
+                animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+            )
+            LaunchedEffect(Unit) {
+                showAnimated = true
+            }
+
+            val infiniteTransition = rememberInfiniteTransition()
+            val scale by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(500, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                )
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "未起床",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = NotWakeupRed,
+                    modifier = Modifier
+                        .offset(x = offsetX)
+                        .padding(end = 8.dp)
+                )
+                Button(
+                    onClick = { onUserClick(user) },
+                    modifier = Modifier
+                        .scale(scale)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NotWakeupRed)
+                ) {
+                    Text(
+                        text = "BUSTER",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        } else {
+            val statusText = if (!isMorningPhase) {
+                "待機中"
+            } else {
+                when {
+                    user.status == "woke_up" -> "起床"
+                    isPunishmentTime -> "未起床"
+                    else -> "待機中"
+                }
+            }
+            val statusColor = if (!isMorningPhase) {
+                NeutralGray
+            } else {
+                when {
+                    user.status == "woke_up" -> WakeupGreen
+                    isPunishmentTime -> NotWakeupRed
+                    else -> NeutralGray
+                }
+            }
+            Text(
+                text = statusText,
+                color = statusColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
         }
-        val statusColor = when {
-            isClickable -> MaterialTheme.colorScheme.error
-            user.status == "woke_up" -> Color(0xFF2E7D32)
-            else -> Color.Gray
-        }
-        Text(
-            text = statusText,
-            color = statusColor,
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp
-        )
     }
 }
 
