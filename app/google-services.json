@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "444559183899",
-    "project_id": "ev3-oshioki-app",
-    "storage_bucket": "ev3-oshioki-app.firebasestorage.app"
+    "project_number": "YOUR_PROJECT_NUMBER_HERE",
+    "project_id": "YOUR_PROJECT_ID_HERE",
+    "storage_bucket": "YOUR_PROJECT_ID_HERE.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:444559183899:android:c872248b787fc48efce8be",
+        "mobilesdk_app_id": "YOUR_MOBILE_SDK_APP_ID_HERE",
         "android_client_info": {
           "package_name": "com.example.wildcard"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBfwPYXRQD4zVmlp4-RLaWRW0wKJ5dY6vY"
+          "current_key": "YOUR_FIREBASE_API_KEY_HERE"
         }
       ],
       "services": {

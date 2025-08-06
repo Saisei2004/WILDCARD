@@ -1,8 +1,17 @@
+<div align="center">
+
+![Sleep Buster Logo](docs/images/sleep_buster_logo.png)
+
 # Sleep Buster 🤖⏰
 ### みんなの朝を『つなぐ』アプリ
 
+[![Hackit 2025](https://img.shields.io/badge/Hackit%202025-最優秀賞受賞-gold?style=for-the-badge&logo=trophy)](https://github.com/Saisei2004/WILDCARD)
+
+</div>
+
 > **Hackit 2025 WildC@rd チーム開発プロジェクト**  
 > 発表日: 2025年8月4日 (一般参加チーム)  
+> **🏆 最優秀賞受賞 🏆**
 > 
 > 設定した時間に起きられなかった友人や仲間を、  
 > 遠隔操作のロボットで「物理的にたたき起こす」  
@@ -10,7 +19,20 @@
 
 ---
 
+## このドキュメントについて
+
+このドキュメントは、金沢工業大学のプロジェクト同士の交流を目的とした学内ハッカソン「Hackit（ハックイット）」で開発されたプロジェクトのREADMEです。  
+
+**参考リンク：**
+
+- [Hackit2025 公式サイト](https://hackit-website.vercel.app/)
+- [Hackit2025 Notion](https://kit-hackit.notion.site/Hackit-Connect-2025-23219ee67e9b80f89e89e4b762bbb0f0)
+
+---
+
 ## 🏆 プロジェクト概要
+
+**金沢工業大学 学内ハッカソン「Hackit 2025」にて、全8チームが参加する激戦の中、ユニークなアイデアとハードウェア・ソフトウェアの高度な連携が評価され、見事『最優秀賞』を受賞しました！**
 
 **Sleep Buster**は単なる目覚ましアプリではありません。「みんなの朝を『つなぐ』アプリ」というコンセプトのもと、友人同士で楽しく、そして確実に朝の時間を守ることができる革新的なアラームアプリケーションです。
 
@@ -21,14 +43,53 @@
 
 ---
 
-## 🤖 バスターロボット「バスタ君」
+## 🎬 デモ動画
+
+### **システム実演動画**
+📹 **[system_demo.mp4](docs/videos/system_demo.mp4)** - バスタ君の遠隔操作とWebRTC映像通信の実演
+
+> 📝 **動画について**
+> - **内容**: ロボットの遠隔操作とWebRTCリアルタイム映像通信の動作確認
+> - **状態**: UI改良前のデバッグ版での動作テスト
+> - **確認項目**: 
+>   - バスタ君の前後左右移動
+>   - ハンマー機構の動作
+>   - WebRTCによるリアルタイム映像配信
+>   - Androidアプリからの制御信号送信
+
+> 💡 **動画ファイルは `docs/videos/` フォルダに保存されています**
+> - `system_demo.mp4` - システム全体の動作実演（デバッグ版UI）
+
+---
+
+## 🤖 バスタ君詳細
 
 このプロジェクトの物理的なコンポーネントが、バスターロボットの「**バスタ君**」です。
+
+![バスタ君詳細](docs/images/buster_detail.png)
 
 ### **主な機能**
 - 🚗 **差動駆動タイヤによる移動** - 十字キーで前後左右に自在に操作
 - 🔨 **梃子クランク機構のハンマー** - 寝ている人を物理的に起こす
 - 🔊 **警告音システム** - EV3からビープ音で音による警告
+
+### **特徴的な機構**
+
+#### **🔨 ハンマー機構**
+
+![ハンマー機構](docs/images/hammer_mechanism.png)
+
+- **設計**: てこクランク機構により効率的な打撃を実現
+- **動作**: モーターの回転運動をハンマーの上下運動に変換
+- **効果**: 適切な力で確実に起床を促進
+
+#### **📱 スマホスタンド**
+
+![スマホスタンド](docs/images/smartphone_stand.png)
+
+- **3Dプリンター製**: プロジェクト専用に設計された固定システム
+- **安定性**: 移動中もスマートフォンをしっかりと保持
+- **カメラアングル**: WebRTC映像配信に最適な角度を確保
 
 ### **技術構成**
 - **本体**: Linux搭載のLEGO MINDSTORMS EV3
@@ -42,9 +103,13 @@
 
 ---
 
-## 📱 アプリの利用フロー
+## 📱 アプリ使用の流れ
 
-### **1️⃣ ルームの設定**
+![アプリ使用の流れ](docs/images/app_usage_flow.png)
+
+### **1️⃣ ルーム設定モード**
+
+![ルーム設定モード](docs/images/room_setup_mode.png)
 
 #### **参加方法**
 1. ホーム画面でユーザー名を入力
@@ -56,17 +121,21 @@
 - お互いの起床ステータスをリアルタイムで監視
 - ルーム内の参加者は誰でも起床時間を設定・変更可能
 
-### **2️⃣ アラームと起床**
+### **2️⃣ アラームモード**
+
+![アラームモード](docs/images/alarm_mode.png)
 
 1. **設定時間になるとアラームが鳴る**
 2. **ユーザーが「起きたボタン」を押す**
 3. **ステータスが「起床」に変更**
-4. **制裁（お仕置き）モードの権限が付与**
+4. **バスター（お仕置き）モードの権限が付与**
 
-### **3️⃣ 制裁モード**
+### **3️⃣ バスターモード**
+
+![バスターモード](docs/images/buster_mode.png)
 
 #### **発動条件**
-ルーム内にまだ起きていない参加者がいる場合、起床済みのユーザーは「**制裁モード**」を発動できます。
+ルーム内にまだ起きていない参加者がいる場合、起床済みのユーザーは「**バスターモード**」を発動できます。
 
 #### **遠隔操作機能**
 
@@ -112,7 +181,7 @@ WILDCARD/
 │   │   │   ├── registration/     # ルーム参加画面
 │   │   │   ├── dashboard/        # メイン画面・アラーム
 │   │   │   ├── mission/          # 起床ミッション
-│   │   │   └── remotecontrol/    # 制裁モード・遠隔操作
+│   │   │   └── remotecontrol/    # バスターモード・遠隔操作
 │   │   ├── service/              # サービス層
 │   │   │   ├── firebase/         # Firebase連携
 │   │   │   ├── webrtc/           # WebRTC映像通信
@@ -121,6 +190,7 @@ WILDCARD/
 │   │   └── data/                 # データモデル
 ├── docs/                         # ドキュメント・画像
 │   ├── images/                   # README用画像
+│   ├── videos/                   # システム実演動画
 │   └── SystemSpecification.md   # 詳細技術仕様書
 ├── ev3src/                       # バスタ君制御プログラム
 │   └── ev3Action.py              # EV3メイン制御スクリプト
@@ -139,7 +209,71 @@ WILDCARD/
 - **Firebase プロジェクト**
 - **SkyWay アカウント**
 
-### **📱 Sleep Buster アプリのビルド**
+### **� API設定 (必須)**
+
+#### **1. Firebase設定**
+1. Firebase Consoleで新しいプロジェクトを作成
+2. `app/google-services.json` ファイルを以下のプレースホルダーを実際の値に置き換えて設定：
+```json
+{
+  "project_info": {
+    "project_number": "YOUR_PROJECT_NUMBER_HERE",
+    "project_id": "YOUR_PROJECT_ID_HERE", 
+    "storage_bucket": "YOUR_PROJECT_ID_HERE.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "YOUR_MOBILE_SDK_APP_ID_HERE",
+        "android_client_info": {
+          "package_name": "com.example.wildcard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "YOUR_FIREBASE_API_KEY_HERE"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**📝 設定値の取得方法:**
+- Firebase Console → プロジェクト設定 → 全般タブから各値を取得
+- `YOUR_PROJECT_NUMBER_HERE` → プロジェクト番号
+- `YOUR_PROJECT_ID_HERE` → プロジェクトID
+- `YOUR_MOBILE_SDK_APP_ID_HERE` → アプリID
+- `YOUR_FIREBASE_API_KEY_HERE` → ウェブAPIキー
+
+#### **2. SkyWay WebRTC設定**
+1. SkyWayコンソールでアプリケーションを作成
+2. `app/src/main/java/com/example/wildcard/utils/Constants.kt` を以下のプレースホルダーを実際の値に置き換えて設定：
+```kotlin
+// SkyWay WebRTC設定
+const val SKYWAY_APP_ID = "YOUR_SKYWAY_APP_ID_HERE"
+const val SKYWAY_SECRET_KEY = "YOUR_SKYWAY_SECRET_KEY_HERE"
+```
+
+**📝 設定値の取得方法:**
+- SkyWayコンソール → アプリケーション作成 → 認証情報から取得
+- `YOUR_SKYWAY_APP_ID_HERE` → アプリケーションID
+- `YOUR_SKYWAY_SECRET_KEY_HERE` → シークレットキー
+
+#### **3. EV3 Bluetooth設定**
+1. EV3のBluetoothを有効にし、MACアドレスを確認
+2. `Constants.kt` で以下のプレースホルダーを実際の値に置き換えて設定：
+```kotlin
+// EV3 Bluetooth関連
+const val EV3_MAC_ADDRESS = "YOUR_EV3_MAC_ADDRESS_HERE"
+```
+
+**📝 設定値の取得方法:**
+- EV3本体 → Settings → Bluetooth → About から確認
+- `YOUR_EV3_MAC_ADDRESS_HERE` → EV3のMACアドレス（例: 00:16:53:42:2B:99）
+
+### **�📱 Sleep Buster アプリのビルド**
 
 ```bash
 # リポジトリクローン
@@ -149,12 +283,11 @@ cd WILDCARD
 # Android Studioでプロジェクトを開く
 # File > Open > WILDCARDフォルダを選択
 
-# Firebase設定ファイルを配置
-# app/google-services.json (Firebase Consoleからダウンロード)
-
-# ビルド・実行
+# 上記のAPI設定を完了後、ビルド・実行
 # Android Studio上でRun/Debug
 ```
+
+⚠️ **重要**: 上記のAPI設定を完了してからビルドを実行してください。設定が不完全な場合、アプリケーションは正常に動作しません。
 
 ### **🤖 バスタ君セットアップ**
 
@@ -176,6 +309,8 @@ ssh robot@[BUSTER_IP_ADDRESS] "python3 ev3Action.py"
 
 ### **Step 1: ルーム参加**
 
+![ルーム設定UI](docs/images/room_setup_ui.png)
+
 1. Sleep Busterアプリを起動
 2. ユーザー名を入力
 3. 「ルームに入る」で合言葉入力
@@ -183,20 +318,26 @@ ssh robot@[BUSTER_IP_ADDRESS] "python3 ev3Action.py"
 
 ### **Step 2: 起床時間設定**
 
+![ダッシュボードUI](docs/images/dashboard_ui.png)
+
 1. ダッシュボードで起床時間を設定
 2. ルームメンバー全員に自動共有
 3. カウントダウン開始
 
 ### **Step 3: 起床ミッション**
 
-1. 設定時間にアラーム音開始
-2. バスタ君からもビープ音
-3. 「起きたボタン」をタップで起床完了
+![アラームUI](docs/images/alarm_ui.png)
 
-### **Step 4: 制裁モード発動**
+1. 設定時間にアラーム音開始
+2. 「起きたボタン」をタップで起床完了
+3. ステータスが起床に変更
+
+### **Step 4: バスターモード発動**
+
+![バスターモード操作画面](docs/images/buster_mode_ui.png)
 
 1. 寝坊した人のカメラ映像が自動配信開始
-2. 起床済みメンバーが制裁モード画面へ
+2. 起床済みメンバーがバスターモード画面へ
 3. リアルタイム映像を見ながらバスタ君を遠隔操作
 
 ---
@@ -214,7 +355,10 @@ ssh robot@[BUSTER_IP_ADDRESS] "python3 ev3Action.py"
 
 ### **チーム WildC@rd**
 
+**金沢工業大学 学内ハッカソン「Hackit 2025」にて、計8チームが参加する中、見事最優秀賞を受賞しました！**
+
 ### **開発成果**
+- 🏅 **最優秀賞を受賞** - Hackit 2025で優れたアイデアと技術力が評価
 - 📅 **開発期間**: 3日間集中開発
 - 🎯 **完動デモ**: ハッカソンで実際に動作するプロトタイプを披露
 - 🏗️ **拡張可能設計**: 将来機能追加に対応した堅牢なアーキテクチャ
@@ -272,7 +416,14 @@ implementation 'androidx.camera:camera-camera2:1.3.4'
 - 🏗️ **プロジェクト構造**: システム仕様書 第2章参照
 
 ### **デモ・プレゼンテーション**
-詳細なデモ動画やプレゼンテーション資料については、システム仕様書をご参照ください。
+- 🎬 **システム実演動画**: [docs/videos/system_demo.mp4](./docs/videos/system_demo.mp4) - ロボット遠隔操作とWebRTC通信の動作確認
+- 📄 **プレゼンテーション資料**: システム仕様書に詳細情報を記載
+- 🎯 **確認済み動作**: 
+  - バスタ君の差動駆動による移動制御
+  - ハンマー機構の遠隔作動
+  - WebRTCリアルタイム映像配信
+  - Androidアプリからの制御コマンド送信
+- ⚠️ **注意**: デモ動画はUI改良前のデバッグ版での動作テストです
 
 ---
 
@@ -282,12 +433,14 @@ implementation 'androidx.camera:camera-camera2:1.3.4'
 
 **バスターロボット「バスタ君」**と連携することで、物理的で確実な起床体験を提供し、友人同士の絆を深めながら楽しく朝の時間を守ることができます。
 
-Hackit 2025で3日間という短期間で完成させたこのプロジェクトは、ハードウェアとソフトウェアの完全統合、リアルタイム通信技術、そしてユニークなユーザー体験の融合を実現しています。
+Hackit 2025で3日間という短期間で完成させたこのプロジェクトは、ハードウェアとソフトウェアの完全統合、リアルタイム通信技術、そしてユニークなユーザー体験の融合を実現し、**見事最優秀賞を受賞**という輝かしい成果を収めました。
+
+この成功は、チーム一丸となって取り組んだ創意工夫と技術への情熱の結晶です。**Sleep Buster**は今後も進化を続け、より多くの人々の朝を変えていきます。
 
 ---
 
 **🏆 Hackit 2025 WildC@rd チーム開発**  
-**最強のAndroidアラームアプリケーション - Sleep Buster**  
+**最優秀賞受賞 - 最強のAndroidアラームアプリケーション Sleep Buster**  
 *朝起きられないすべての人のために*
 
 
