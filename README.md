@@ -46,7 +46,12 @@
 ## 🎬 デモ動画
 
 ### **システム実演動画**
-📹 **[system_demo.mp4](docs/videos/system_demo.mp4)** - バスタ君の遠隔操作とWebRTC映像通信の実演
+
+
+https://github.com/user-attachments/assets/9c1e33d7-b87b-451b-a50a-781e3fd89808
+
+
+📹 - バスタ君の遠隔操作とWebRTC映像通信の実演
 
 > 📝 **動画について**
 > - **内容**: ロボットの遠隔操作とWebRTCリアルタイム映像通信の動作確認
